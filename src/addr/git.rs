@@ -6,8 +6,8 @@ use crate::{
 use async_trait::async_trait;
 use fs_extra::dir::CopyOptions;
 use git2::{
-    build::{CheckoutBuilder, RepoBuilder},
     BranchType, FetchOptions, MergeOptions, PushOptions, RemoteUpdateFlags, Repository, ResetType,
+    build::{CheckoutBuilder, RepoBuilder},
 };
 use home::home_dir;
 use log::warn;
@@ -146,7 +146,7 @@ impl GitAddr {
         };
 
         // 获取上游分支信息
-        let upstream_branch = format!("origin/{}", branch_name);
+        let upstream_branch = format!("origin/{branch_name}");
         let upstream_ref = match repo.find_reference(&upstream_branch) {
             Ok(r) => r,
             Err(_) => return Ok(()), // 没有上游分支
@@ -255,7 +255,7 @@ impl GitAddr {
             .or(self.tag.as_ref())
             .or(self.branch.as_ref())
         {
-            name = format!("{}_{}", name, postfix);
+            name = format!("{name}_{postfix}");
         }
         name
     }
@@ -413,7 +413,7 @@ impl GitAddr {
 
         // 准备认证回调
         let callbacks = self.build_remote_callbacks(); // 使用构建的回调
-                                                       // 配置获取选项
+        // 配置获取选项
         let mut fetch_options = FetchOptions::new();
         fetch_options.remote_callbacks(callbacks);
 
@@ -460,7 +460,7 @@ impl GitAddr {
 
     /// 检出指定标签
     fn checkout_tag(&self, repo: &Repository, tag: &str) -> Result<(), git2::Error> {
-        let refname = format!("refs/tags/{}", tag);
+        let refname = format!("refs/tags/{tag}");
         let obj = repo.revparse_single(&refname)?;
         repo.checkout_tree(&obj, Some(&mut CheckoutBuilder::new().force()))?;
         repo.set_head_detached(obj.id())?;
@@ -482,27 +482,27 @@ impl GitAddr {
         }
 
         // 尝试查找远程分支
-        let remote_branch_name = format!("origin/{}", branch);
+        let remote_branch_name = format!("origin/{branch}");
         if let Ok(b) = repo.find_branch(&remote_branch_name, BranchType::Remote) {
             // 创建本地分支并设置跟踪
             let commit = b.get().peel_to_commit()?;
             let mut new_branch = repo.branch(branch, &commit, false)?;
-            new_branch.set_upstream(Some(&format!("origin/{}", branch)))?;
+            new_branch.set_upstream(Some(&format!("origin/{branch}")))?;
 
             // 切换到新分支
-            let refname = format!("refs/heads/{}", branch);
+            let refname = format!("refs/heads/{branch}");
             repo.set_head(&refname)?;
             repo.checkout_head(Some(&mut CheckoutBuilder::new().force()))?;
             return Ok(());
         }
 
-        Err(git2::Error::from_str(&format!("分支 '{}' 不存在", branch)))
+        Err(git2::Error::from_str(&format!("分支 '{branch}' 不存在",)))
     }
 
     /// 提交
     fn submit(&self, repo: &Repository, branch: &str) -> Result<(), git2::Error> {
         info!("git push origin {}", &branch);
-        let branch_path = format!("refs/heads/{}", branch);
+        let branch_path = format!("refs/heads/{branch}",);
         // 拉取远程进行更新
         self.fetch_updates(repo)?;
         // 合并远程更新
@@ -549,7 +549,7 @@ impl GitAddr {
         let mut push_options = PushOptions::new();
         push_options.remote_callbacks(self.build_remote_callbacks());
         origin.push(
-            &[&format!("{}:{}", branch_path, branch_path)],
+            &[&format!("{branch_path}:{branch_path}",)],
             Some(&mut push_options),
         )?;
         info!("push complete");

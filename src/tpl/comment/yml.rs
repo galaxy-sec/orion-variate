@@ -1,10 +1,10 @@
 use orion_error::{ErrorOwe, ErrorWith};
 use winnow::{
+    ModalResult, Parser,
     ascii::{line_ending, till_line_ending},
     combinator::{fail, opt},
     error::{StrContext, StrContextValue},
     token::{literal, take_till, take_while},
-    ModalResult, Parser,
 };
 
 pub struct YmlComment {}
@@ -16,7 +16,7 @@ impl YmlComment {
 
 use crate::tpl::{TplReason, TplResult};
 
-use super::super::error::{err_code_prompt, WinnowErrorEx};
+use super::super::error::{WinnowErrorEx, err_code_prompt};
 #[derive(Debug)]
 pub enum YmlStatus {
     Comment,
@@ -141,8 +141,8 @@ pub fn remove_comment(code: &str) -> TplResult<String> {
         .want("remove comment");
     match pure_code {
         Err(e) => {
-            println!("code:\n{}", xcode);
-            println!("{}", e);
+            println!("code:\n{xcode}");
+            println!("{e}");
             Err(e)
         }
         Ok(o) => Ok(o),
@@ -186,7 +186,7 @@ avg: 0.278 # Batting average
 rbi: 147   # Runs Batted In
         "#;
         let _codes = remove_comment(data).assert();
-        println!("{}", _codes);
+        println!("{_codes}",);
         assert!(!_codes.contains("#"));
     }
 
@@ -205,7 +205,7 @@ rbi: 147   # Runs Batted In
             - St Louis Cardinals
         "#;
         let _codes = remove_comment(data).assert();
-        println!("{}", _codes);
+        println!("{_codes}",);
         assert!(!_codes.contains("#"));
     }
 
@@ -222,7 +222,7 @@ rbi: 147   # Runs Batted In
         - Ken Griffey
         "#;
         let _codes = remove_comment(data).assert();
-        println!("{}", _codes);
+        println!("{_codes}",);
         assert!(!_codes.contains("#"));
     }
 
@@ -239,7 +239,7 @@ rbi: 147   # Runs Batted In
     tie-fighter: '|\-*-/|'
         "#;
         let _codes = remove_comment(data).assert();
-        println!("{}", _codes);
+        println!("{_codes}",);
         assert!(_codes.contains("#"));
     }
 
@@ -257,7 +257,7 @@ rbi: 147   # Runs Batted In
 
         "#;
         let _codes = remove_comment(data).assert();
-        println!("{}", _codes);
+        println!("{_codes}",);
         assert!(_codes.contains("#"));
     }
 
@@ -280,7 +280,7 @@ global:
             imageRegistry: ""
         "#;
         let _codes = remove_comment(data).assert();
-        println!("{}", _codes);
+        println!("{_codes}",);
     }
 
     #[test]
@@ -288,7 +288,7 @@ global:
         let data = r#"hello
 # xxxabc"#;
         let _codes = remove_comment(data).assert();
-        println!("{}", _codes);
+        println!("{_codes}",);
     }
     //          regex: (\d+);((([0-9]+?)(\.|$)){4})
     #[test]
@@ -299,7 +299,7 @@ global:
 
         let data = r#"regex: (\d+);((([0-9]+?)(\.|$)){4})"#;
         let _codes = remove_comment(data).assert();
-        println!("{}", _codes);
+        println!("{_codes}",);
     }
     #[test]
     fn test_case10() {
@@ -317,7 +317,7 @@ max_compacted_log_segment_size: 536870912 # 512 mb
 kafka_connection_rate_limit: 1000
            "#;
         let _codes = remove_comment(data).assert();
-        println!("{}", _codes);
+        println!("{_codes}",);
     }
     #[test]
     fn test_file_case1() {

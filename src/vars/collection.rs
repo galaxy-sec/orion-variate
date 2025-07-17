@@ -86,7 +86,7 @@ mod tests {
     // 辅助函数：创建临时测试文件
     fn create_temp_file(content: &str) -> NamedTempFile {
         let mut file = NamedTempFile::new().unwrap();
-        write!(file, "{}", content).unwrap();
+        write!(file, "{content}",).unwrap();
         file
     }
     #[test]
@@ -156,7 +156,7 @@ mod tests {
 
         // 序列化为 TOML 字符串
         let toml_string = toml::to_string(&collection).expect("序列化失败");
-        println!("{}", toml_string);
+        println!("{toml_string}",);
 
         // 反序列化测试
         let deserialized: VarCollection = toml::from_str(&toml_string).expect("反序列化失败");

@@ -14,14 +14,14 @@ impl Display for WinnowErrorEx {
             ErrMode::Backtrack(err) => {
                 write!(f, "backtrack : ")?;
                 if let Some(cause) = err.cause() {
-                    write!(f, "cause: {}", cause)?;
+                    write!(f, "cause: {cause}")?;
                 }
                 collect_context(err)
             }
             ErrMode::Cut(err) => {
                 write!(f, "cut: ")?;
                 if let Some(cause) = err.cause() {
-                    write!(f, "cause: {}", cause)?;
+                    write!(f, "cause: {cause}")?;
                 }
                 collect_context(err)
             }
@@ -29,7 +29,7 @@ impl Display for WinnowErrorEx {
         context_vec.reverse();
         writeln!(f, "parse context:",)?;
         for context in context_vec {
-            write!(f, "{}::", context)?;
+            write!(f, "{context}::",)?;
         }
         Ok(())
     }
@@ -60,7 +60,7 @@ impl From<ErrMode<ContextError>> for WinnowErrorEx {
 pub fn err_code_prompt(code: &str) -> String {
     let take_len = if code.len() > 200 { 200 } else { code.len() };
     if let Some((left, _right)) = code.split_at_checked(take_len) {
-        return format!("{}...", left);
+        return format!("{left}...",);
     }
     "".to_string()
 }

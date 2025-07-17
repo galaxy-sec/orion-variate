@@ -35,7 +35,7 @@ fn get_os_info() -> (String, String, u64) {
 
 fn format_os_sys() -> String {
     let (arch, os_type, ver_major) = get_os_info();
-    format!("{}_{}_{}", arch, os_type, ver_major)
+    format!("{arch}_{os_type}_{ver_major}",)
 }
 
 /// 从当前目录开始向上查找 _gal/project.toml 文件
@@ -77,7 +77,7 @@ impl Drop for WorkDir {
     fn drop(&mut self) {
         info!("set current dir:{}", self.original_dir.display());
         if let Err(e) = env::set_current_dir(&self.original_dir) {
-            log::error!("Failed to restore directory: {}", e);
+            log::error!("Failed to restore directory: {e}",);
         }
     }
 }
@@ -87,7 +87,7 @@ mod tests {
 
     use tempfile::TempDir;
 
-    use crate::vars::global::{find_project_define, WorkDir};
+    use crate::vars::global::{WorkDir, find_project_define};
 
     #[ignore = "change work dir"]
     #[test]

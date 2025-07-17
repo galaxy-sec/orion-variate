@@ -9,8 +9,8 @@ use orion_error::ErrorOwe;
 use serde_derive::{Deserialize, Serialize};
 
 use super::{
-    types::{EnvEvalable, ValueType},
     EnvDict,
+    types::{EnvEvalable, ValueType},
 };
 
 pub type ValueMap = IndexMap<String, ValueType>;
@@ -83,7 +83,7 @@ mod tests {
     // 辅助函数：创建临时测试文件
     fn create_temp_file(content: &str) -> NamedTempFile {
         let mut file = NamedTempFile::new().unwrap();
-        write!(file, "{}", content).unwrap();
+        write!(file, "{content}",).unwrap();
         file
     }
     #[test]
@@ -115,15 +115,15 @@ mod tests {
         dict.insert("key1".to_string(), ValueType::from("value1"));
         dict.insert("key2".to_string(), ValueType::from(42));
         let content = toml::to_string(&dict).unwrap();
-        println!("{}", content);
+        println!("{content}",);
 
         let loaded: ValueDict = toml::from_str(content.as_str()).unwrap();
         assert_eq!(dict, loaded);
 
         let content = serde_yaml::to_string(&dict).unwrap();
-        println!("{}", content);
+        println!("{content}",);
 
         let content = serde_json::to_string(&dict).unwrap();
-        println!("{}", content);
+        println!("{content}",);
     }
 }

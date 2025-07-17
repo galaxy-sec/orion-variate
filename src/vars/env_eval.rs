@@ -33,7 +33,7 @@ pub fn expand_env_vars(dict: &EnvDict, input: &str) -> String {
                 } else {
                     match env::var(&var_name) {
                         Ok(value) => {
-                            debug!("get env var {} : {}", var_name, value);
+                            debug!("get env var {var_name} : {value}",);
                             result.push_str(&value);
                         }
                         Err(_) => {
@@ -63,7 +63,7 @@ mod tests {
 
     use crate::{
         tools::get_repo_name,
-        vars::{env_eval::expand_env_vars, EnvDict, ValueType},
+        vars::{EnvDict, ValueType, env_eval::expand_env_vars},
     };
 
     #[test]

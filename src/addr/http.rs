@@ -97,8 +97,7 @@ impl HttpAddr {
             }
             _ => {
                 return Err(StructError::from_res(format!(
-                    "Unsupported HTTP method: {}",
-                    method
+                    "Unsupported HTTP method: {method}",
                 )));
             }
         };

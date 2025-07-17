@@ -1,16 +1,16 @@
 use derive_getters::Getters;
 use orion_error::{ErrorOwe, ErrorWith};
 use winnow::{
+    ModalResult, Parser,
     ascii::{line_ending, till_line_ending},
     combinator::{fail, opt},
     error::{StrContext, StrContextValue},
     token::{literal, take_till, take_until, take_while},
-    ModalResult, Parser,
 };
 
 use crate::tpl::{TplReason, TplResult};
 
-use super::super::error::{err_code_prompt, WinnowErrorEx};
+use super::super::error::{WinnowErrorEx, err_code_prompt};
 
 #[derive(Debug, Clone, Getters)]
 pub struct CommentLabel {
@@ -142,7 +142,7 @@ pub fn remove_comment(code: &str, comment: &CommentLabel) -> TplResult<String> {
         .want("remove comment");
     match pure_code {
         Err(e) => {
-            println!("{}", e);
+            println!("{e}");
             Err(e)
         }
         Ok(o) => Ok(o),
@@ -314,6 +314,6 @@ mod tests {
         more code
         "#;
         let _codes = remove_comment(data, &CommentLabel::c_style()).assert();
-        println!("{}", _codes);
+        println!("{_codes}",);
     }
 }
