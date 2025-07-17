@@ -2,7 +2,7 @@
 name = "orion_variate"
 authors = ["wukong<sec-wukong@outlook.com>"]
 edition = "2024"
-version = "0.1.0"
+version = "0.3.0"
 
 [dependencies]
 orion_common = { path = "../orion_common" }
