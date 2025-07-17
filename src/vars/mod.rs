@@ -16,4 +16,4 @@ pub use origin::OriginDict;
 pub use origin::OriginValue;
 pub use types::EnvDict;
 pub use types::EnvEvalable;
-pub use types::{ValueType,ValueObj,ValueVec};
+pub use types::{ValueObj, ValueType, ValueVec};
