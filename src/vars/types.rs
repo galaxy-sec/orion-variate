@@ -83,7 +83,7 @@ mod tests {
         // 反序列化为 ValueType 枚举
         let decoded: ValueType = serde_yaml::from_str(yaml_data).unwrap();
 
-        println!("\n🔧 Modlist 反序列化结果:\n{:#?}", decoded);
+        println!("\n🔧 Modlist 反序列化结果:\n{decoded:#?}",);
     }
     use super::*;
     use orion_error::TestAssert;
@@ -128,9 +128,9 @@ mod tests {
         let yaml_output = serde_yaml::to_string(&complex_obj).unwrap();
 
         println!("\n✅ 混合类型序列化测试:\n");
-        println!("📦 原始对象: {:#?}", complex_obj);
-        println!("📜 JSON 输出:\n{}", json_output);
-        println!("🎯 YAML 输出:\n{}", yaml_output);
+        println!("📦 原始对象: {complex_obj:#?}",);
+        println!("📜 JSON 输出:\n{json_output}",);
+        println!("🎯 YAML 输出:\n{yaml_output}",);
 
         // 验证往返序列化
         let json_roundtrip: ValueObj = serde_json::from_str(&json_output).unwrap();
