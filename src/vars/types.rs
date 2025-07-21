@@ -1,6 +1,11 @@
-use std::{collections::HashMap, net::IpAddr};
+use std::{
+    collections::HashMap,
+    fmt::{Display, Formatter},
+    net::IpAddr,
+};
 
 use super::{ValueDict, env_eval::expand_env_vars};
+use derive_more::From;
 use serde_derive::{Deserialize, Serialize};
 
 pub type EnvDict = ValueDict;
@@ -23,7 +28,7 @@ impl EnvEvalable<Option<String>> for Option<String> {
 pub type ValueObj = HashMap<String, ValueType>;
 pub type ValueVec = Vec<ValueType>;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, From)]
 #[serde(untagged)]
 pub enum ValueType {
     String(String),
@@ -34,6 +39,21 @@ pub enum ValueType {
     Obj(ValueObj),
     List(ValueVec),
 }
+
+impl Display for ValueType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ValueType::String(v) => write!(f, "{v}"),
+            ValueType::Bool(v) => write!(f, "{v}"),
+            ValueType::Number(v) => write!(f, "{v}"),
+            ValueType::Float(v) => write!(f, "{v}"),
+            ValueType::Ip(v) => write!(f, "{v}"),
+            ValueType::Obj(_) => write!(f, "obj..."),
+            ValueType::List(_) => write!(f, "list..."),
+        }
+    }
+}
+
 impl EnvEvalable<ValueType> for ValueType {
     fn env_eval(self, dict: &EnvDict) -> ValueType {
         match self {
@@ -46,21 +66,6 @@ impl EnvEvalable<ValueType> for ValueType {
 impl From<&str> for ValueType {
     fn from(value: &str) -> Self {
         Self::String(value.to_string())
-    }
-}
-impl From<bool> for ValueType {
-    fn from(value: bool) -> Self {
-        Self::Bool(value)
-    }
-}
-impl From<u64> for ValueType {
-    fn from(value: u64) -> Self {
-        Self::Number(value)
-    }
-}
-impl From<f64> for ValueType {
-    fn from(value: f64) -> Self {
-        Self::Float(value)
     }
 }
 
