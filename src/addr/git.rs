@@ -64,7 +64,7 @@ impl GitAddr {
         self.tag = Some(tag.into());
         self
     }
-    pub fn with_opt_tag<S: Into<String>>(mut self, tag: Option<String>) -> Self {
+    pub fn with_opt_tag(mut self, tag: Option<String>) -> Self {
         self.tag = tag;
         self
     }
@@ -72,7 +72,7 @@ impl GitAddr {
         self.branch = Some(branch.into());
         self
     }
-    pub fn with_opt_branch<S: Into<String>>(mut self, branch: Option<String>) -> Self {
+    pub fn with_opt_branch(mut self, branch: Option<String>) -> Self {
         self.branch = branch;
         self
     }
