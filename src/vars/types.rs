@@ -1,11 +1,11 @@
 use std::{
-    collections::HashMap,
     fmt::{Display, Formatter},
     net::IpAddr,
 };
 
 use super::{ValueDict, env_eval::expand_env_vars};
 use derive_more::From;
+use indexmap::IndexMap;
 use serde_derive::{Deserialize, Serialize};
 
 pub type EnvDict = ValueDict;
@@ -25,7 +25,7 @@ impl EnvEvalable<Option<String>> for Option<String> {
     }
 }
 
-pub type ValueObj = HashMap<String, ValueType>;
+pub type ValueObj = IndexMap<String, ValueType>;
 pub type ValueVec = Vec<ValueType>;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, From)]

@@ -1,60 +1,75 @@
 use std::env;
 
-use log::debug;
-use tracing::error;
+use winnow::{Parser, token::take_until};
 
-use super::{EnvDict, ValueType};
+use super::EnvDict;
+
+fn until_beg<'i>(s: &mut &'i str) -> winnow::Result<&'i str> {
+    let data = take_until(0.., "${").parse_next(s)?;
+    "${".parse_next(s)?;
+    Ok(data)
+}
+fn until_name<'i>(s: &mut &'i str) -> winnow::Result<&'i str> {
+    let data = take_until(0.., ":").parse_next(s)?;
+    ":".parse_next(s)?;
+    Ok(data)
+}
+fn until_name_default<'i>(s: &mut &'i str) -> winnow::Result<Vec<&'i str>> {
+    let mut data: Vec<&str> = Vec::new();
+    if let Ok(ok_data) = until_name.parse_next(s) {
+        data.push(ok_data)
+    }
+    let last = take_until(0.., "}").parse_next(s)?;
+    "}".parse_next(s)?;
+    data.push(last);
+    Ok(data)
+}
 
 pub fn expand_env_vars(dict: &EnvDict, input: &str) -> String {
-    let mut result = String::new();
-    let mut chars = input.chars().peekable();
-
-    while let Some(c) = chars.next() {
-        if c == '$' && chars.peek() == Some(&'{') {
-            // 跳过 '{'
-            chars.next();
-
-            // 收集变量名
-            let mut var_name = String::new();
-            let mut found_closing_brace = false;
-
-            for c in chars.by_ref() {
-                if c == '}' {
-                    found_closing_brace = true;
-                    break;
-                }
-                var_name.push(c);
+    let mut out = String::new();
+    let mut data = input;
+    while !data.is_empty() {
+        match until_beg.parse_next(&mut data) {
+            Ok(ok_data) => {
+                out.push_str(ok_data);
             }
-
-            // 处理变量替换
-            if found_closing_brace {
-                if let Some(ValueType::String(value)) = dict.get(&var_name) {
-                    result.push_str(value);
-                } else {
-                    match env::var(&var_name) {
-                        Ok(value) => {
-                            debug!("get env var {var_name} : {value}",);
-                            result.push_str(&value);
-                        }
-                        Err(_) => {
-                            error!("not get env var :{}", var_name);
-                            result.push_str("${");
-                            result.push_str(&var_name);
-                            result.push('}');
-                        }
+            Err(_e) => {
+                out.push_str(data);
+                return out;
+            }
+        }
+        match until_name_default.parse_next(&mut data) {
+            Ok(vecs) => match vecs.len() {
+                1 => {
+                    if let Some(found) = dict.get(vecs[0]) {
+                        out.push_str(found.to_string().as_str());
+                    } else if let Ok(found) = env::var(vecs[0]) {
+                        out.push_str(found.as_str());
+                    } else {
+                        out.push_str(format!("${{{}}}", vecs[0]).as_str());
                     }
                 }
-            } else {
-                // 未闭合的花括号
-                result.push_str("${");
-                result.push_str(&var_name);
+                2 => {
+                    if let Some(found) = dict.get(vecs[0]) {
+                        out.push_str(found.to_string().as_str());
+                    } else if let Ok(found) = env::var(vecs[0]) {
+                        out.push_str(found.as_str());
+                    } else {
+                        out.push_str(vecs[1]);
+                    }
+                }
+                _ => {
+                    panic!()
+                }
+            },
+            Err(_) => {
+                out.push_str("${");
+                out.push_str(data);
+                return out;
             }
-        } else {
-            result.push(c);
         }
     }
-
-    result
+    out
 }
 
 #[cfg(test)]
@@ -180,5 +195,43 @@ mod tests {
         unsafe { env::set_var("A", "1") };
         unsafe { env::set_var("B", "2") };
         assert_eq!(expand_env_vars(&EnvDict::default(), "${A}${B}"), "12");
+    }
+    #[test]
+    fn test_default_value() {
+        unsafe { env::remove_var("DEFAULT_TEST_VAR") };
+        assert_eq!(
+            expand_env_vars(&EnvDict::default(), "Hello ${DEFAULT_TEST_VAR:World}"),
+            "Hello World"
+        );
+    }
+
+    #[test]
+    fn test_default_value_with_existing_variable() {
+        unsafe { env::set_var("DEFAULT_TEST_VAR1", "Galaxy") };
+        assert_eq!(
+            expand_env_vars(&EnvDict::default(), "Hello ${DEFAULT_TEST_VAR1:World}"),
+            "Hello Galaxy"
+        );
+    }
+
+    #[test]
+    fn test_default_value_with_dict() {
+        let mut dict = EnvDict::new();
+        dict.insert("DEFAULT_TEST_VAR", ValueType::from("DictValue"));
+        unsafe { env::set_var("DEFAULT_TEST_VAR", "EnvValue") };
+        assert_eq!(
+            expand_env_vars(&dict, "Hello ${DEFAULT_TEST_VAR:World}"),
+            "Hello DictValue"
+        );
+    }
+
+    #[test]
+    fn test_default_value_with_dict_but_no_env() {
+        let dict = EnvDict::new();
+        unsafe { env::remove_var("DEFAULT_TEST_VAR") };
+        assert_eq!(
+            expand_env_vars(&dict, "Hello ${DEFAULT_TEST_VAR:World}"),
+            "Hello World"
+        );
     }
 }
