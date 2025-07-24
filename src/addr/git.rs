@@ -697,6 +697,7 @@ mod tests {
     use crate::types::RemoteUpdate;
     use crate::{addr::GitAddr, update::UpdateOptions};
 
+    #[ignore = "no run in ci"]
     #[tokio::test]
     async fn test_dir_upload_to_remote_repo() -> AddrResult<()> {
         let temp_dir = tempdir().assert();
@@ -714,6 +715,7 @@ mod tests {
         Ok(())
     }
 
+    #[ignore = "no run in ci"]
     #[tokio::test]
     async fn test_file_upload_to_remote_repo() -> AddrResult<()> {
         let temp_dir = tempdir().assert();
