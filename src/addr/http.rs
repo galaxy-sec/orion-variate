@@ -1,7 +1,6 @@
 use crate::{predule::*, types::RemoteUpdate, update::UpdateOptions, vars::EnvDict};
 
 use orion_error::UvsResFrom;
-use orion_infra::path::make_clean_path;
 use tokio::io::AsyncWriteExt;
 use tracing::info;
 use url::Url;
@@ -120,7 +119,9 @@ impl HttpAddr {
             info!(target :"spec/addr", "{} exists , ignore!! ",dest_path.display());
             return Ok(dest_path.to_path_buf());
         }
-        make_clean_path(dest_path).owe_res()?;
+        if dest_path.exists() {
+            std::fs::remove_file(dest_path).owe_res()?;
+        }
         let mut ctx = WithContext::want("download url");
         ctx.with("url", self.url());
         let client = reqwest::Client::new();
@@ -211,25 +212,30 @@ mod tests {
         let server = MockServer::start();
         let mock = server.mock(|when, then| {
             when.method(GET)
-                .path("/wpflow")
+                .path("/wpflow.txt")
                 .header("Authorization", "Basic Z2VuZXJpYy0xNzQ3NTM1OTc3NjMyOjViMmM5ZTliN2YxMTFhZjUyZjAzNzVjMWZkOWQzNWNkNGQwZGFiYzM=");
-            then.status(200)
-                .body("mock_binary_data");
+    then.status(200)
+        .header("content-type", "text/html; charset=UTF-8")
+        .body("download success");
         });
 
         // 2. 执行下载
-        let temp_dir = tempfile::tempdir().owe_res()?;
-        let http_addr = HttpAddr::from(server.url("/wpflow")).with_credentials(
+        let temp_dir = PathBuf::from("./test/temp");
+        let test_file = temp_dir.join("wpflow.txt");
+        if test_file.exists() {
+            std::fs::remove_file(&test_file).owe_res()?;
+        }
+        let http_addr = HttpAddr::from(server.url("/wpflow.txt")).with_credentials(
             "generic-1747535977632",
             "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
         );
 
         http_addr
-            .update_local(temp_dir.path(), &UpdateOptions::for_test())
+            .update_local(&temp_dir, &UpdateOptions::for_test())
             .await?;
 
         // 3. 验证结果
-        assert!(temp_dir.path().join("wpflow").exists());
+        assert!(test_file.exists());
         mock.assert();
         Ok(())
     }
