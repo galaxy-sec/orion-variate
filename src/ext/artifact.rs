@@ -114,6 +114,7 @@ mod tests {
 
     use super::*;
 
+    #[ignore = "not run in ci"]
     #[tokio::test]
     async fn test_http_artifact_v1() -> AddrResult<()> {
         let artifact = Artifact::new(
@@ -133,6 +134,7 @@ mod tests {
         Ok(())
     }
 
+    #[ignore = "not run in ci"]
     #[tokio::test]
     async fn test_http_artifact_v2() -> AddrResult<()> {
         let home_dir = home_dir().assert();

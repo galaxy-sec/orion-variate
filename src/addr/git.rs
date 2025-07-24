@@ -298,9 +298,10 @@ impl LocalUpdate for GitAddr {
         }
 
         match git2::Repository::open(&git_local) {
-            Ok(re) => {
-                debug!(target :"spec", "pull repo : {}", git_local.display());
-                self.update_repo(&re).owe_data().with(&ctx)?;
+            Ok(_re) => {
+                debug!(target :"spec", " use repo : {}", git_local.display());
+                //not need update git ;
+                //self.update_repo(&re).owe_data().with(&ctx)?;
             }
             Err(_) => {
                 debug!(target :"spec", "clone repo : {}", git_local.display());

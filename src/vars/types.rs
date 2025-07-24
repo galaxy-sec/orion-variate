@@ -69,6 +69,36 @@ impl From<&str> for ValueType {
     }
 }
 
+impl ValueType {
+    pub fn len(&self) -> usize {
+        match self {
+            ValueType::String(s) => s.len(),
+            ValueType::List(v) => v.len(),
+            ValueType::Obj(m) => m.len(),
+            _ => 1,
+        }
+    }
+    pub fn is_empty(&self) -> bool {
+        match self {
+            ValueType::String(s) => s.is_empty(),
+            ValueType::List(v) => v.is_empty(),
+            ValueType::Obj(m) => m.is_empty(),
+            _ => false,
+        }
+    }
+
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            ValueType::String(_) => "String",
+            ValueType::Bool(_) => "Bool",
+            ValueType::Number(_) => "Number",
+            ValueType::Float(_) => "Float",
+            ValueType::Ip(_) => "Ip",
+            ValueType::Obj(_) => "Obj",
+            ValueType::List(_) => "List",
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::ValueType;
@@ -164,5 +194,52 @@ mod tests {
         assert_eq!(obj["string"], yaml_decoded["string"]);
         assert_eq!(obj["number"], yaml_decoded["number"]);
         assert_eq!(obj["boolean"], yaml_decoded["boolean"]);
+    }
+    #[test]
+    fn test_value_type_len() {
+        let s = ValueType::String("hello".to_string());
+        assert_eq!(s.len(), 5);
+
+        let l = ValueType::List(vec![
+            ValueType::String("a".to_string()),
+            ValueType::String("b".to_string()),
+        ]);
+        assert_eq!(l.len(), 2);
+
+        let mut obj = ValueObj::new();
+        obj.insert("key1".to_string(), ValueType::String("value1".to_string()));
+        obj.insert("key2".to_string(), ValueType::String("value2".to_string()));
+        let o = ValueType::Obj(obj);
+        assert_eq!(o.len(), 2);
+
+        let b = ValueType::Bool(true);
+        assert_eq!(b.len(), 1);
+
+        let n = ValueType::Number(42);
+        assert_eq!(n.len(), 1);
+    }
+
+    #[test]
+    fn test_value_type_name() {
+        let s = ValueType::String("hello".to_string());
+        assert_eq!(s.type_name(), "String");
+
+        let b = ValueType::Bool(true);
+        assert_eq!(b.type_name(), "Bool");
+
+        let n = ValueType::Number(42);
+        assert_eq!(n.type_name(), "Number");
+
+        let f = ValueType::Float(4.14);
+        assert_eq!(f.type_name(), "Float");
+
+        let ip = ValueType::Ip("127.0.0.1".parse().unwrap());
+        assert_eq!(ip.type_name(), "Ip");
+
+        let obj = ValueType::Obj(ValueObj::new());
+        assert_eq!(obj.type_name(), "Obj");
+
+        let list = ValueType::List(ValueVec::new());
+        assert_eq!(list.type_name(), "List");
     }
 }

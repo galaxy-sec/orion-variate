@@ -53,7 +53,7 @@ impl LocalUpdate for LocalAddr {
 
         if src.is_file() {
             std::fs::copy(&src, &dst).owe_res()?;
-        } else if dst.exists() && up_options.copy_to_exists_path() {
+        } else if dst.exists() && up_options.reuse_cache() {
             info!(
                 target : "spec/addr/local",
                 "ignore update {} to {} !", src.display(),dst_copy.display()

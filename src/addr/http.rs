@@ -1,6 +1,7 @@
 use crate::{predule::*, types::RemoteUpdate, update::UpdateOptions, vars::EnvDict};
 
 use orion_error::UvsResFrom;
+use orion_infra::path::make_clean_path;
 use tokio::io::AsyncWriteExt;
 use tracing::info;
 use url::Url;
@@ -115,10 +116,11 @@ impl HttpAddr {
     pub async fn download(&self, dest_path: &Path, options: &UpdateOptions) -> AddrResult<PathBuf> {
         use indicatif::{ProgressBar, ProgressStyle};
 
-        if dest_path.exists() && options.reuse_remote_file() {
+        if dest_path.exists() && options.reuse_cache() {
             info!(target :"spec/addr", "{} exists , ignore!! ",dest_path.display());
             return Ok(dest_path.to_path_buf());
         }
+        make_clean_path(dest_path).owe_res()?;
         let mut ctx = WithContext::want("download url");
         ctx.with("url", self.url());
         let client = reqwest::Client::new();
