@@ -7,6 +7,7 @@ mod error;
 mod global;
 mod origin;
 mod types;
+mod parse;
 pub use collection::VarCollection;
 pub use constraint::{ValueConstraint, ValueScope};
 pub use definition::VarDefinition;
