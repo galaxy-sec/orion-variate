@@ -1,6 +1,14 @@
-use winnow::{ascii::multispace0, combinator::{alt, separated}, token::{literal, take_while}, Parser, Result};
+use winnow::{
+    Parser, Result,
+    ascii::multispace0,
+    combinator::{alt, separated},
+    token::{literal, take_while},
+};
 
-use crate::vars::{parse::base::{gal_raw_str, take_bool, take_float, take_number, take_string, wn_desc}, ValueObj, ValueType, ValueVec};
+use crate::vars::{
+    ValueObj, ValueType, ValueVec,
+    parse::base::{gal_raw_str, take_bool, take_float, take_number, take_string, wn_desc},
+};
 
 pub fn gal_simple_value(data: &mut &str) -> Result<ValueType> {
     alt((
@@ -29,13 +37,10 @@ pub fn gal_named_value(input: &mut &str) -> Result<(String, ValueType)> {
     ":".parse_next(input)?;
     let _ = multispace0.parse_next(input)?;
 
-    let val = take_value
-        .context(wn_desc("<var-val>"))
-        .parse_next(input)?;
+    let val = take_value.context(wn_desc("<var-val>")).parse_next(input)?;
     multispace0(input)?;
     Ok((key.to_string(), val))
 }
-
 
 //task obj
 // x = { a : "A", b : "B" , c : 1}
@@ -61,8 +66,7 @@ pub fn take_value_map(data: &mut &str) -> Result<ValueObj> {
         .context(wn_desc("vec start"))
         .parse_next(data)?;
     let _ = multispace0.parse_next(data)?;
-    let items: Vec<(String, ValueType)> =
-        separated(0.., gal_named_value, ",").parse_next(data)?;
+    let items: Vec<(String, ValueType)> = separated(0.., gal_named_value, ",").parse_next(data)?;
     literal("}").parse_next(data)?;
     let mut obj = ValueObj::new();
     items.into_iter().for_each(|(k, v)| {
@@ -75,7 +79,6 @@ pub fn take_value_map(data: &mut &str) -> Result<ValueObj> {
 mod tests {
 
     use orion_error::TestAssert;
-
 
     use super::*;
 
@@ -96,18 +99,12 @@ mod tests {
         // 测试多键值对对象
         let mut input = "{ a: 1, b: \"two\", c: true,d: 1.1 }";
         let obj = take_value_map(&mut input)?;
-        assert_eq!(
-            obj.get(&"a".to_string()).unwrap(),
-            &ValueType::from(1)
-        );
+        assert_eq!(obj.get(&"a".to_string()).unwrap(), &ValueType::from(1));
         assert_eq!(
             obj.get(&"b".to_string()).unwrap(),
             &ValueType::from("two".to_string())
         );
-        assert_eq!(
-            obj.get(&"c".to_string()).unwrap(),
-            &ValueType::from(true)
-        );
+        assert_eq!(obj.get(&"c".to_string()).unwrap(), &ValueType::from(true));
 
         // 测试嵌套对象
         let mut input = "{ outer: { inner: 42 } }";

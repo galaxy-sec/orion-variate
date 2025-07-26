@@ -1,14 +1,17 @@
 use std::{
     fmt::{Display, Formatter},
-    net::IpAddr, str::FromStr,
+    net::IpAddr,
 };
 
-use crate::vars::{error::{VarsError, VarsReason, VarsResult}, parse::{take_obj_value, take_value, take_value_map, take_value_vec}};
+use crate::vars::{
+    error::{VarsReason, VarsResult},
+    parse::{take_value_map, take_value_vec},
+};
 
 use super::{ValueDict, env_eval::expand_env_vars};
 use derive_more::From;
 use indexmap::IndexMap;
-use orion_error::{ErrorOwe, ErrorWith, ToStructError};
+use orion_error::{ErrorOwe, ErrorWith};
 use serde_derive::{Deserialize, Serialize};
 use winnow::Parser;
 
@@ -73,7 +76,6 @@ impl From<&str> for ValueType {
     }
 }
 
-
 impl ValueType {
     pub fn len(&self) -> usize {
         match self {
@@ -104,16 +106,25 @@ impl ValueType {
         }
     }
     pub fn update_by_str(&mut self, s: &str) -> VarsResult<()> {
-        let mut input = s ;
+        let mut input = s;
         match self {
             ValueType::String(x) => *x = s.to_string(),
-            ValueType::Bool(x) =>  *x = s.parse().owe(VarsReason::Format).with(s.to_string())?,
-            ValueType::Number(x) =>  *x = s.parse().owe(VarsReason::Format).with(s.to_string())?,
-            ValueType::Float(x) => *x=  s.parse().owe(VarsReason::Format).with(s.to_string())?,
+            ValueType::Bool(x) => *x = s.parse().owe(VarsReason::Format).with(s.to_string())?,
+            ValueType::Number(x) => *x = s.parse().owe(VarsReason::Format).with(s.to_string())?,
+            ValueType::Float(x) => *x = s.parse().owe(VarsReason::Format).with(s.to_string())?,
             ValueType::Ip(x) => *x = s.parse().owe(VarsReason::Format).with(s.to_string())?,
-            ValueType::Obj(x) => *x = take_value_map.parse_next( &mut input ).owe(VarsReason::Format).with(s.to_string())?,
-            ValueType::List(x) =>*x = take_value_vec.parse_next( &mut input ).owe(VarsReason::Format).with(s.to_string())?,
-
+            ValueType::Obj(x) => {
+                *x = take_value_map
+                    .parse_next(&mut input)
+                    .owe(VarsReason::Format)
+                    .with(s.to_string())?
+            }
+            ValueType::List(x) => {
+                *x = take_value_vec
+                    .parse_next(&mut input)
+                    .owe(VarsReason::Format)
+                    .with(s.to_string())?
+            }
         }
         Ok(())
     }
@@ -273,7 +284,7 @@ mod tests {
         let mut bool_val = ValueType::Bool(false);
         bool_val.update_by_str("true").unwrap();
         assert_eq!(bool_val, ValueType::Bool(true));
-        
+
         // 测试无效 Bool 值
         let mut bool_val = ValueType::Bool(false);
         assert!(bool_val.update_by_str("invalid").is_err());
@@ -282,16 +293,16 @@ mod tests {
         let mut number_val = ValueType::Number(10);
         number_val.update_by_str("42").unwrap();
         assert_eq!(number_val, ValueType::Number(42));
-        
+
         // 测试无效 Number 值
         let mut number_val = ValueType::Number(10);
         assert!(number_val.update_by_str("invalid").is_err());
 
         // 测试 Float 类型更新
         let mut float_val = ValueType::Float(1.5);
-        float_val.update_by_str("3.14").unwrap();
-        assert_eq!(float_val, ValueType::Float(3.14));
-        
+        float_val.update_by_str("3.24").unwrap();
+        assert_eq!(float_val, ValueType::Float(3.24));
+
         // 测试无效 Float 值
         let mut float_val = ValueType::Float(1.5);
         assert!(float_val.update_by_str("invalid").is_err());
@@ -300,7 +311,7 @@ mod tests {
         let mut ip_val = ValueType::Ip("127.0.0.1".parse().unwrap());
         ip_val.update_by_str("192.168.1.1").unwrap();
         assert_eq!(ip_val, ValueType::Ip("192.168.1.1".parse().unwrap()));
-        
+
         // 测试无效 IP 值
         let mut ip_val = ValueType::Ip("127.0.0.1".parse().unwrap());
         assert!(ip_val.update_by_str("invalid").is_err());
@@ -311,7 +322,7 @@ mod tests {
         let mut expected_obj = ValueObj::new();
         expected_obj.insert("key".to_string(), ValueType::String("value".to_string()));
         assert_eq!(obj_val, ValueType::Obj(expected_obj));
-        
+
         // 测试无效 Obj 值
         let mut obj_val = ValueType::Obj(ValueObj::new());
         assert!(obj_val.update_by_str("invalid").is_err());
@@ -324,7 +335,7 @@ mod tests {
             ValueType::String("item2".to_string()),
         ]);
         assert_eq!(list_val, ValueType::List(expected_list));
-        
+
         // 测试无效 List 值
         let mut list_val = ValueType::List(ValueVec::new());
         assert!(list_val.update_by_str("invalid").is_err());

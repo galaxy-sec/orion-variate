@@ -18,7 +18,7 @@ impl VarDefinition {
     pub fn name(&self) -> &str {
         self.name.as_str()
     }
-    pub fn desp(&self) -> Option<&str>{
+    pub fn desp(&self) -> Option<&str> {
         self.desp.as_deref()
     }
 }

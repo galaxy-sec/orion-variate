@@ -6,7 +6,7 @@ use crate::{types::LocalUpdate, vars::EnvEvalable};
 
 use super::{AddrResult, GitAddr, HttpAddr, LocalAddr};
 
-#[derive(Clone, Debug, Serialize, Deserialize,PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum AddrType {
     #[serde(rename = "git")]

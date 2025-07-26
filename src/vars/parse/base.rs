@@ -1,7 +1,7 @@
-use winnow::ascii::{digit1, multispace0, take_escaped};
+use winnow::ascii::{digit1, take_escaped};
 use winnow::combinator::{alt, delimited, fail};
 use winnow::error::{StrContext, StrContextValue};
-use winnow::token::{literal, one_of, take_till, take_until, take_while};
+use winnow::token::{literal, one_of, take_until, take_while};
 use winnow::{Parser, Result};
 
 #[inline(always)]
@@ -63,26 +63,6 @@ pub fn take_bool(data: &mut &str) -> Result<bool> {
     .parse_next(data)
 }
 
-//take var name.
-// eg : ${name}  -> name
-pub fn take_var_ref_name(data: &mut &str) -> Result<String> {
-    let _ = multispace0.parse_next(data)?;
-    delimited(
-        "${",
-        take_till(1.., |c| c == '}')
-            .map(|s: &str| s.trim())
-            .verify(|s: &str| !s.is_empty())
-            .context(StrContext::Expected(StrContextValue::Description(
-                "non-empty variable name",
-            ))),
-        "}".context(StrContext::Expected(StrContextValue::Description(
-            "missing closing '}'",
-        ))),
-    )
-    .context(StrContext::Label("environment variable"))
-    .parse_next(data)
-    .map(|s: &str| s.to_string())
-}
 //take raw sting by ^""^
 //eg:  ^"hello"^ , ^"hell"0"^
 pub fn gal_raw_str(data: &mut &str) -> Result<String> {
@@ -114,7 +94,7 @@ mod tests {
         // 测试包含转义双引号的字符串
         let mut input = r#""M\"hello\"""#;
         let t_out = take_string(&mut input);
-        println!("{}", input);
+        println!("{input}");
         assert_eq!(t_out, Ok(r#"M\"hello\""#.to_string()));
 
         // 测试空字符串
@@ -132,19 +112,19 @@ mod tests {
 
     #[test]
     fn test_gal_raw_string() {
-        let mut input = "r#\"git branch --show-current |  sed -E \"s/(feature|develop|ver-dev|release|master|issue)(\\/.*)?/_branch_\\1/g\" \"#" ;
+        let mut input = "r#\"git branch --show-current |  sed -E \"s/(feature|develop|ver-dev|release|master|issue)(\\/.*)?/_branch_\\1/g\" \"#";
         let exepct = r#"git branch --show-current |  sed -E "s/(feature|develop|ver-dev|release|master|issue)(\/.*)?/_branch_\1/g" "#;
         assert_eq!(gal_raw_str(&mut input), Ok(exepct.to_string()));
-        println!("{}", input);
+        println!("{input}",);
         // 测试普通原始字符串
         let mut input = "r#\"hello\"#";
         assert_eq!(gal_raw_str(&mut input), Ok("hello".to_string()));
-        println!("{}", input);
+        println!("{input}",);
 
         // 测试包含特殊字符的原始字符串
         let mut input = "r#\"hell\\\"0\"#";
         let t_out = gal_raw_str(&mut input);
-        println!("{}", input);
+        println!("{input}",);
         assert_eq!(t_out, Ok(r#"hell\"0"#.to_string()));
 
         // 测试空字符串
@@ -164,72 +144,10 @@ mod tests {
     }
 
     #[test]
-    fn valid_variable1() {
-        let mut input = "${name}";
-        assert_eq!(take_var_ref_name(&mut input), Ok("name".to_string()));
-        assert_eq!(input, "");
-    }
-    #[test]
-    fn valid_variable2() {
-        let mut input = "${name[0]}";
-        assert_eq!(take_var_ref_name(&mut input), Ok("name[0]".to_string()));
-        assert_eq!(input, "");
-    }
-
-    #[test]
-    fn trailing_characters() {
-        let mut input = "${var}remaining";
-        assert_eq!(take_var_ref_name(&mut input), Ok("var".to_string()));
-        assert_eq!(input, "remaining");
-    }
-
-    #[test]
-    fn missing_closing_brace() {
-        let mut input = "${var";
-        assert!(take_var_ref_name(&mut input).is_err());
-    }
-
-    #[test]
-    fn no_opening_brace() {
-        let mut input = "var}";
-        assert!(take_var_ref_name(&mut input).is_err());
-    }
-
-    #[test]
-    fn empty_variable() {
-        let mut input = "${}";
-        assert!(take_var_ref_name(&mut input).is_err());
-    }
-
-    #[test]
-    fn special_characters_in_name() {
-        let mut input = "${var-name_123}";
-        assert_eq!(
-            take_var_ref_name(&mut input),
-            Ok("var-name_123".to_string())
-        );
-        assert_eq!(input, "");
-    }
-
-    #[test]
-    fn nested_braces_in_name() {
-        let mut input = "${var{abc}}";
-        assert_eq!(take_var_ref_name(&mut input), Ok("var{abc".to_string()));
-        assert_eq!(input, "}");
-    }
-
-    #[test]
-    fn trimmed_spaces() {
-        let mut input = "${  spaced_var  }";
-        assert_eq!(take_var_ref_name(&mut input), Ok("spaced_var".to_string()));
-        assert_eq!(input, "");
-    }
-
-    #[test]
     fn test_take_float() -> Result<()> {
         // 测试普通浮点数
-        let mut input = "3.14";
-        assert_eq!(take_float(&mut input)?, 3.14);
+        let mut input = "3.24";
+        assert_eq!(take_float(&mut input)?, 3.24);
         assert_eq!(input, ""); // 输入被完全消耗
 
         // 测试整数部分为 0
