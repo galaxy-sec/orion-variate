@@ -11,12 +11,15 @@ pub struct VarDefinition {
     //constr: Option<ValueConstraint>,
 }
 impl VarDefinition {
-    pub(crate) fn value(&self) -> ValueType {
+    pub fn value(&self) -> ValueType {
         self.value.clone()
     }
 
-    pub(crate) fn name(&self) -> &str {
+    pub fn name(&self) -> &str {
         self.name.as_str()
+    }
+    pub fn desp(&self) -> Option<&str>{
+        self.desp.as_deref()
     }
 }
 impl From<(&str, &str)> for VarDefinition {
