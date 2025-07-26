@@ -10,7 +10,7 @@ use crate::{types::LocalUpdate, vars::EnvEvalable};
 
 use super::AddrResult;
 
-#[derive(Getters, Clone, Debug, Serialize, Deserialize)]
+#[derive(Getters, Clone, Debug, Serialize, Deserialize,PartialEq)]
 #[serde(rename = "http")]
 pub struct HttpAddr {
     url: String,
