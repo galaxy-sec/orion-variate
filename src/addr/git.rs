@@ -17,7 +17,7 @@ use orion_infra::path::ensure_path;
 
 use super::AddrResult;
 
-#[derive(Clone, Debug, Serialize, Deserialize, Default, Getters)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default, Getters,PartialEq)]
 #[serde(rename = "git")]
 pub struct GitAddr {
     repo: String,
