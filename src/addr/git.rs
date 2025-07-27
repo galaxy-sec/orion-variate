@@ -17,6 +17,32 @@ use orion_infra::path::ensure_path;
 
 use super::AddrResult;
 
+/// Git地址结构体
+/// 
+/// 支持通过SSH和HTTPS协议访问Git仓库
+/// 
+/// # Token认证示例
+/// 
+/// ```rust
+/// use orion_variate::addr::GitAddr;
+/// 
+/// // GitHub Token认证
+/// let addr = GitAddr::from("https://github.com/user/repo.git")
+///     .with_github_token("your_github_token");
+/// 
+/// // GitLab Token认证
+/// let addr = GitAddr::from("https://gitlab.com/user/repo.git")
+///     .with_gitlab_token("your_gitlab_token");
+/// 
+/// // 通用Token认证
+/// let addr = GitAddr::from("https://gitea.com/user/repo.git")
+///     .with_username("your_username")
+///     .with_token("your_token");
+/// 
+/// // 从环境变量读取Token
+/// let addr = GitAddr::from("https://github.com/user/repo.git")
+///     .with_github_env_token();
+/// ```
 #[derive(Clone, Debug, Serialize, Deserialize, Default, Getters,PartialEq)]
 #[serde(rename = "git")]
 pub struct GitAddr {
@@ -37,6 +63,12 @@ pub struct GitAddr {
     // 新增：SSH密钥密码
     #[serde(skip_serializing_if = "Option::is_none")]
     ssh_passphrase: Option<String>,
+    // 新增：Token认证（用于HTTPS协议）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    token: Option<String>,
+    // 新增：用户名（用于Token认证）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    username: Option<String>,
 }
 impl EnvEvalable<GitAddr> for GitAddr {
     fn env_eval(self, dict: &EnvDict) -> GitAddr {
@@ -49,6 +81,8 @@ impl EnvEvalable<GitAddr> for GitAddr {
             path: self.path.env_eval(dict),
             ssh_key: self.ssh_key.env_eval(dict),
             ssh_passphrase: self.ssh_passphrase.env_eval(dict),
+            token: self.token.env_eval(dict),
+            username: self.username.env_eval(dict),
         }
     }
 }
@@ -94,36 +128,141 @@ impl GitAddr {
         self.ssh_passphrase = Some(ssh_passphrase.into());
         self
     }
+    // 新增：设置Token认证
+    pub fn with_token<S: Into<String>>(mut self, token: S) -> Self {
+        self.token = Some(token.into());
+        self
+    }
+    // 新增：设置用户名（用于Token认证）
+    pub fn with_username<S: Into<String>>(mut self, username: S) -> Self {
+        self.username = Some(username.into());
+        self
+    }
+    // 新增：设置Token认证（可选）
+    pub fn with_opt_token(mut self, token: Option<String>) -> Self {
+        self.token = token;
+        self
+    }
+    // 新增：设置用户名（可选）
+    pub fn with_opt_username(mut self, username: Option<String>) -> Self {
+        self.username = username;
+        self
+    }
 
-    /// 构建远程回调（包含SSH认证）
+    /// 为GitHub设置Token认证（便捷方法）
+    /// GitHub使用用户名+Token作为密码的方式
+    pub fn with_github_token<S: Into<String>>(mut self, token: S) -> Self {
+        self.username = Some("git".to_string());
+        self.token = Some(token.into());
+        self
+    }
+
+    /// 为GitLab设置Token认证（便捷方法）
+    /// GitLab可以使用"oauth2"作为用户名，Token作为密码
+    pub fn with_gitlab_token<S: Into<String>>(mut self, token: S) -> Self {
+        self.username = Some("oauth2".to_string());
+        self.token = Some(token.into());
+        self
+    }
+
+    /// 为Gitea设置Token认证（便捷方法）
+    /// Gitea可以使用Token作为密码
+    pub fn with_gitea_token<S: Into<String>>(mut self, token: S) -> Self {
+        self.username = Some("git".to_string());
+        self.token = Some(token.into());
+        self
+    }
+
+    /// 从环境变量读取Token认证
+    /// 
+    /// # Arguments
+    /// * `env_var` - 环境变量名，例如 "GITHUB_TOKEN"
+    pub fn with_env_token(mut self, env_var: &str) -> Self {
+        if let Ok(token) = std::env::var(env_var) {
+            self.token = Some(token);
+        }
+        self
+    }
+
+    /// 从环境变量读取GitHub Token认证
+    pub fn with_github_env_token(mut self) -> Self {
+        self.with_env_token("GITHUB_TOKEN")
+    }
+
+    /// 从环境变量读取GitLab Token认证
+    pub fn with_gitlab_env_token(mut self) -> Self {
+        if let Ok(token) = std::env::var("GITLAB_TOKEN") {
+            self.username = Some("oauth2".to_string());
+            self.token = Some(token);
+        }
+        self
+    }
+
+    /// 从环境变量读取Gitea Token认证
+    pub fn with_gitea_env_token(mut self) -> Self {
+        self.with_env_token("GITEA_TOKEN")
+    }
+
+    /// 构建远程回调（包含SSH认证和Token认证）
     fn build_remote_callbacks(&self) -> git2::RemoteCallbacks<'_> {
         let mut callbacks = git2::RemoteCallbacks::new();
         let ssh_key = self.ssh_key.clone();
         let ssh_passphrase = self.ssh_passphrase.clone();
+        let token = self.token.clone();
+        let username = self.username.clone();
 
-        callbacks.credentials(move |_url, username_from_url, allowed_types| {
-            // 检查是否允许SSH认证
-            if allowed_types.contains(git2::CredentialType::SSH_KEY) {
-                let username = username_from_url.unwrap_or("git");
-
-                // 尝试获取SSH密钥路径
-                let key_path = if let Some(custom_key) = &ssh_key {
-                    // 使用用户指定的密钥
-                    PathBuf::from(custom_key)
+        callbacks.credentials(move |url, username_from_url, allowed_types| {
+            // 检查URL类型，决定使用哪种认证方式
+            let is_https = url.starts_with("https://");
+            
+            if is_https {
+                // HTTPS协议使用Token认证
+                if allowed_types.contains(git2::CredentialType::USER_PASS_PLAINTEXT) {
+                    let username = username.as_deref().unwrap_or(username_from_url.unwrap_or("git"));
+                    if let Some(token) = &token {
+                        // 根据不同的Git平台使用不同的Token格式
+                        let actual_username = if username == "oauth2" {
+                            // GitLab使用oauth2作为用户名
+                            "oauth2"
+                        } else if username == "x-token-auth" {
+                            // Bitbucket使用x-token-auth作为用户名
+                            "x-token-auth"
+                        } else {
+                            // 默认使用提供的用户名或git
+                            username
+                        };
+                        git2::Cred::userpass_plaintext(actual_username, token)
+                    } else {
+                        // 如果没有token，允许git使用默认的credential helper
+                        Err(git2::Error::from_str("需要Token认证但未提供token"))
+                    }
                 } else {
-                    // 自动查找常见默认密钥
-                    find_default_ssh_key()
-                        .ok_or_else(|| git2::Error::from_str("无法找到默认SSH密钥"))?
-                };
-
-                git2::Cred::ssh_key(
-                    username,
-                    None, // 不使用默认公钥路径
-                    &key_path,
-                    ssh_passphrase.as_deref(), // 传递密码（如果有）
-                )
+                    Err(git2::Error::from_str("HTTPS协议不支持所需的认证类型"))
+                }
             } else {
-                Err(git2::Error::from_str("不支持所需的认证类型"))
+                // SSH协议使用密钥认证
+                if allowed_types.contains(git2::CredentialType::SSH_KEY) {
+                    let username = username_from_url.unwrap_or("git");
+
+                    // 尝试获取SSH密钥路径
+                    let key_path = if let Some(custom_key) = &ssh_key {
+                        // 使用用户指定的密钥
+                        PathBuf::from(custom_key)
+                    } else {
+                        // 自动查找常见默认密钥
+                        find_default_ssh_key()
+                            .ok_or_else(|| git2::Error::from_str("无法找到默认SSH密钥"))?
+                    };
+
+                    git2::Cred::ssh_key(
+                        username,
+                        None, // 不使用默认公钥路径
+                        &key_path,
+                        ssh_passphrase.as_deref(), // 传递密码（如果有）
+                    )
+                } else {
+                    Err(git2::Error::from_str("SSH协议不支持所需的认证类型"))
+                }
             }
         });
         callbacks
@@ -729,6 +868,101 @@ mod tests {
             .update_remote(&file, &UpdateOptions::default())
             .await?;
         println!("{:?}", git_up.position);
+        Ok(())
+    }
+
+    #[test]
+    fn test_git_addr_token_methods() {
+        // 测试Token相关方法
+        let addr = GitAddr::from("https://github.com/user/repo.git")
+            .with_github_token("test_token");
+        assert_eq!(addr.token, Some("test_token".to_string()));
+        assert_eq!(addr.username, Some("git".to_string()));
+
+        let addr = GitAddr::from("https://gitlab.com/user/repo.git")
+            .with_gitlab_token("test_token");
+        assert_eq!(addr.token, Some("test_token".to_string()));
+        assert_eq!(addr.username, Some("oauth2".to_string()));
+
+        let addr = GitAddr::from("https://gitea.com/user/repo.git")
+            .with_gitea_token("test_token");
+        assert_eq!(addr.token, Some("test_token".to_string()));
+        assert_eq!(addr.username, Some("git".to_string()));
+
+        let addr = GitAddr::from("https://example.com/repo.git")
+            .with_username("custom_user")
+            .with_token("custom_token");
+        assert_eq!(addr.token, Some("custom_token".to_string()));
+        assert_eq!(addr.username, Some("custom_user".to_string()));
+    }
+
+    #[test]
+    fn test_git_addr_env_token() {
+        // 测试环境变量方法（不实际设置环境变量，仅验证方法存在）
+        let addr = GitAddr::from("https://github.com/user/repo.git");
+        
+        // 验证方法可以调用（实际效果取决于环境变量是否存在）
+        let addr = addr.with_env_token("NON_EXISTENT_VAR");
+        assert_eq!(addr.token, None); // 环境变量不存在时返回None
+    }
+
+    #[ignore = "need cnb.cool access"]
+    #[tokio::test]
+    async fn test_git_addr_cnb_cool_clone() -> AddrResult<()> {
+        // 创建临时目录
+        test_init();
+        let dest_path = PathBuf::from("./test/temp/cnb_cool_test");
+        if dest_path.exists() {
+            std::fs::remove_dir_all(&dest_path).unwrap();
+        }
+        std::fs::create_dir_all(&dest_path).unwrap();
+
+        // 测试cnb.cool仓库克隆
+        let git_addr = GitAddr::from("https://cnb.cool/dy-sec/ops/sys-operators/mac-devkit.git")
+            .with_branch("main");
+
+        // 执行克隆
+        let git_up = git_addr
+            .update_local(&dest_path, &UpdateOptions::default())
+            .await?;
+
+        // 验证克隆结果
+        assert!(git_up.position().exists());
+        assert!(git_up.position().join(".git").exists());
+
+        // 验证分支是否正确检出
+        let repo = git2::Repository::open(git_up.position()).owe_res()?;
+        let head = repo.head().owe_res()?;
+        assert!(head.is_branch());
+
+        Ok(())
+    }
+
+    #[ignore = "need cnb.cool token access"]
+    #[tokio::test]
+    async fn test_git_addr_cnb_cool_with_token() -> AddrResult<()> {
+        // 创建临时目录
+        test_init();
+        let dest_path = PathBuf::from("./test/temp/cnb_cool_token_test");
+        if dest_path.exists() {
+            std::fs::remove_dir_all(&dest_path).unwrap();
+        }
+        std::fs::create_dir_all(&dest_path).unwrap();
+
+        // 测试cnb.cool仓库克隆（带token认证）
+        let git_addr = GitAddr::from("https://cnb.cool/dy-sec/ops/mechanism/gxl-dayu.git")
+            .with_branch("main");
+            //.with_token("your-cnb-token"); // 需要替换为实际token
+
+        // 执行克隆
+        let git_up = git_addr
+            .update_local(&dest_path, &UpdateOptions::default())
+            .await?;
+
+        // 验证克隆结果
+        assert!(git_up.position().exists());
+        assert!(git_up.position().join(".git").exists());
+
         Ok(())
     }
 }
