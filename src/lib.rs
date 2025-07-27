@@ -1,6 +1,7 @@
 //! 通用工具库
 
 pub mod addr;
+pub mod archive;
 pub mod ext;
 mod predule;
 pub mod tools;

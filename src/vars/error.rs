@@ -6,6 +6,8 @@ use thiserror::Error;
 pub enum VarsReason {
     #[error("unknow")]
     UnKnow,
+    #[error("format")]
+    Format,
     #[error("{0}")]
     Uvs(UvsReason),
 }
@@ -13,11 +15,11 @@ pub enum VarsReason {
 impl ErrorCode for VarsReason {
     fn error_code(&self) -> i32 {
         match self {
-            VarsReason::UnKnow => 500,
+            VarsReason::Format => 501,
+            VarsReason::UnKnow => 502,
             VarsReason::Uvs(r) => r.error_code(),
         }
     }
 }
 
 pub type VarsResult<T> = Result<T, StructError<VarsReason>>;
-//pub type VarsError = StructError<VarsReason>;

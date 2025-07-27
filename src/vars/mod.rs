@@ -6,6 +6,7 @@ mod env_eval;
 mod error;
 mod global;
 mod origin;
+mod parse;
 mod types;
 pub use collection::VarCollection;
 pub use constraint::{ValueConstraint, ValueScope};

@@ -17,33 +17,32 @@ use orion_infra::path::ensure_path;
 
 use super::AddrResult;
 
-/// Git地址结构体
-/// 
+///
 /// 支持通过SSH和HTTPS协议访问Git仓库
-/// 
+///
 /// # Token认证示例
-/// 
+///
 /// ```rust
 /// use orion_variate::addr::GitAddr;
-/// 
+///
 /// // GitHub Token认证
 /// let addr = GitAddr::from("https://github.com/user/repo.git")
 ///     .with_github_token("your_github_token");
-/// 
+///
 /// // GitLab Token认证
 /// let addr = GitAddr::from("https://gitlab.com/user/repo.git")
 ///     .with_gitlab_token("your_gitlab_token");
-/// 
+///
 /// // 通用Token认证
 /// let addr = GitAddr::from("https://gitea.com/user/repo.git")
 ///     .with_username("your_username")
 ///     .with_token("your_token");
-/// 
+///
 /// // 从环境变量读取Token
 /// let addr = GitAddr::from("https://github.com/user/repo.git")
 ///     .with_github_env_token();
 /// ```
-#[derive(Clone, Debug, Serialize, Deserialize, Default, Getters,PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default, Getters, PartialEq)]
 #[serde(rename = "git")]
 pub struct GitAddr {
     repo: String,
@@ -174,7 +173,7 @@ impl GitAddr {
     }
 
     /// 从环境变量读取Token认证
-    /// 
+    ///
     /// # Arguments
     /// * `env_var` - 环境变量名，例如 "GITHUB_TOKEN"
     pub fn with_env_token(mut self, env_var: &str) -> Self {
@@ -185,7 +184,7 @@ impl GitAddr {
     }
 
     /// 从环境变量读取GitHub Token认证
-    pub fn with_github_env_token(mut self) -> Self {
+    pub fn with_github_env_token(self) -> Self {
         self.with_env_token("GITHUB_TOKEN")
     }
 
@@ -199,7 +198,7 @@ impl GitAddr {
     }
 
     /// 从环境变量读取Gitea Token认证
-    pub fn with_gitea_env_token(mut self) -> Self {
+    pub fn with_gitea_env_token(self) -> Self {
         self.with_env_token("GITEA_TOKEN")
     }
 
@@ -214,11 +213,13 @@ impl GitAddr {
         callbacks.credentials(move |url, username_from_url, allowed_types| {
             // 检查URL类型，决定使用哪种认证方式
             let is_https = url.starts_with("https://");
-            
+
             if is_https {
                 // HTTPS协议使用Token认证
                 if allowed_types.contains(git2::CredentialType::USER_PASS_PLAINTEXT) {
-                    let username = username.as_deref().unwrap_or(username_from_url.unwrap_or("git"));
+                    let username = username
+                        .as_deref()
+                        .unwrap_or(username_from_url.unwrap_or("git"));
                     if let Some(token) = &token {
                         // 根据不同的Git平台使用不同的Token格式
                         let actual_username = if username == "oauth2" {
@@ -874,18 +875,17 @@ mod tests {
     #[test]
     fn test_git_addr_token_methods() {
         // 测试Token相关方法
-        let addr = GitAddr::from("https://github.com/user/repo.git")
-            .with_github_token("test_token");
+        let addr =
+            GitAddr::from("https://github.com/user/repo.git").with_github_token("test_token");
         assert_eq!(addr.token, Some("test_token".to_string()));
         assert_eq!(addr.username, Some("git".to_string()));
 
-        let addr = GitAddr::from("https://gitlab.com/user/repo.git")
-            .with_gitlab_token("test_token");
+        let addr =
+            GitAddr::from("https://gitlab.com/user/repo.git").with_gitlab_token("test_token");
         assert_eq!(addr.token, Some("test_token".to_string()));
         assert_eq!(addr.username, Some("oauth2".to_string()));
 
-        let addr = GitAddr::from("https://gitea.com/user/repo.git")
-            .with_gitea_token("test_token");
+        let addr = GitAddr::from("https://gitea.com/user/repo.git").with_gitea_token("test_token");
         assert_eq!(addr.token, Some("test_token".to_string()));
         assert_eq!(addr.username, Some("git".to_string()));
 
@@ -900,7 +900,7 @@ mod tests {
     fn test_git_addr_env_token() {
         // 测试环境变量方法（不实际设置环境变量，仅验证方法存在）
         let addr = GitAddr::from("https://github.com/user/repo.git");
-        
+
         // 验证方法可以调用（实际效果取决于环境变量是否存在）
         let addr = addr.with_env_token("NON_EXISTENT_VAR");
         assert_eq!(addr.token, None); // 环境变量不存在时返回None
@@ -950,9 +950,9 @@ mod tests {
         std::fs::create_dir_all(&dest_path).unwrap();
 
         // 测试cnb.cool仓库克隆（带token认证）
-        let git_addr = GitAddr::from("https://cnb.cool/dy-sec/ops/mechanism/gxl-dayu.git")
-            .with_branch("main");
-            //.with_token("your-cnb-token"); // 需要替换为实际token
+        let git_addr =
+            GitAddr::from("https://cnb.cool/dy-sec/ops/mechanism/gxl-dayu.git").with_branch("main");
+        //.with_token("your-cnb-token"); // 需要替换为实际token
 
         // 执行克隆
         let git_up = git_addr

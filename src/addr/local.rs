@@ -9,7 +9,7 @@ use crate::{types::LocalUpdate, vars::EnvEvalable};
 
 use super::AddrResult;
 
-#[derive(Getters, Clone, Debug, Serialize, Deserialize,PartialEq)]
+#[derive(Getters, Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename = "local")]
 pub struct LocalAddr {
     path: String,
