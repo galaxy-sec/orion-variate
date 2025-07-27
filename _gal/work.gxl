@@ -1,5 +1,5 @@
-extern mod head { path = "./_gal/"; }
-
+extern mod ver,git { git = "https://github.com/galaxy-operators/cfm-gxl.git", channel = "${GXL_CHANNEL:main}" }
+extern mod rust { path = "./_gal/mods";  }
 mod envs  {
    env _common  : rust_env.init   {
     root      = ".";
