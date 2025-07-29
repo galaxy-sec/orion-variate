@@ -3,33 +3,33 @@ use crate::addr::AddrType;
 use crate::predule::*;
 use crate::types::LocalUpdate;
 use crate::update::UpdateOptions;
-use serde_derive::{Deserialize, Serialize};
 use getset::Getters;
 use getset::Setters;
 use getset::WithSetters;
 use orion_error::ErrorOwe;
+use serde_derive::{Deserialize, Serialize};
 use std::path::Path;
-#[derive(Getters, Clone, Debug, Deserialize, Serialize,Setters,WithSetters)]
-#[getset(get="pub" )]
+#[derive(Getters, Clone, Debug, Deserialize, Serialize, Setters, WithSetters)]
+#[getset(get = "pub")]
 pub struct Artifact {
     name: String,
     version: String,
     #[serde(alias = "addr")]
     origin_addr: AddrType,
-    #[getset(set_with="pub", set="pub")]
+    #[getset(set_with = "pub", set = "pub")]
     #[serde(skip_serializing_if = "Option::is_none")]
     cache_addr: Option<AddrType>,
-    #[getset(set_with="pub", set="pub")]
+    #[getset(set_with = "pub", set = "pub")]
     #[serde(default = "default_cache_enable")]
-    cache_enable : bool,
+    cache_enable: bool,
     local: String,
 }
-fn default_cache_enable() -> bool{
+fn default_cache_enable() -> bool {
     false
 }
 
 impl Artifact {
-    pub fn new<S: Into<String>, A: Into<AddrType>>(name: S, version: S ,addr: A, local: S) -> Self {
+    pub fn new<S: Into<String>, A: Into<AddrType>>(name: S, version: S, addr: A, local: S) -> Self {
         Self {
             name: name.into(),
             version: version.into(),
@@ -53,7 +53,6 @@ impl Artifact {
             .await?;
         Ok(result)
     }
-
 }
 
 #[derive(Getters, Clone, Debug, Deserialize, Serialize)]
@@ -73,7 +72,7 @@ mod tests {
 
     use home::home_dir;
 
-    use crate::addr::{GitAddr, HttpAddr, };
+    use crate::addr::{GitAddr, HttpAddr};
 
     use super::*;
 
@@ -101,7 +100,6 @@ mod tests {
     #[ignore = "not run in ci"]
     #[tokio::test]
     async fn test_http_artifact_v2() -> AddrResult<()> {
-
         let cache_addr = AddrType::Http(HttpAddr::from(
             "https://dy-sec-generic.pkg.coding.net/galaxy-open/generic/galaxy-init.sh?version=latest",
         ));
@@ -115,7 +113,8 @@ mod tests {
             cache_addr: Some(cache_addr),
             cache_enable: false,
             local: "galaxy-init".to_string(),
-        }.with_cache_enable(true);
+        }
+        .with_cache_enable(true);
         Ok(())
     }
 }
