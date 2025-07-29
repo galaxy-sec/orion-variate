@@ -2,7 +2,7 @@
 name = "orion_variate"
 authors = ["wukong<sec-wukong@outlook.com>"]
 edition = "2024"
-version = "0.5.6"
+version = "0.5.7"
 
 [dependencies]
 orion_common = { git = "https://github.com/galaxy-sec/orion-common.git", branch = "main" }
