@@ -17,12 +17,21 @@ pub type ValueMap = IndexMap<String, ValueType>;
 
 impl EnvEvalable<ValueMap> for ValueMap {
     fn env_eval(self, dict: &EnvDict) -> ValueMap {
+        let mut cur_dict = dict.clone();
         let mut vmap = ValueMap::new();
         for (k, v) in self {
-            let e_v = v.env_eval(dict);
+            let e_v = v.env_eval(&cur_dict);
+            cur_dict.insert(k.clone(), e_v.clone());
             vmap.insert(k, e_v);
         }
         vmap
+    }
+}
+
+impl EnvEvalable<ValueDict> for ValueDict {
+    fn env_eval(mut self, dict: &EnvDict) -> ValueDict {
+        self.dict = self.dict.env_eval(dict);
+        self
     }
 }
 
@@ -48,6 +57,7 @@ impl ValueDict {
             }
         }
     }
+    /*
     pub fn env_eval(self, dict: &EnvDict) -> Self {
         let mut map = ValueMap::new();
         for (k, v) in self.dict {
@@ -56,12 +66,14 @@ impl ValueDict {
         }
         Self { dict: map }
     }
+    */
     pub fn eval_from_file(dict: &EnvDict, file_path: &Path) -> TplResult<Self> {
-        let mut cur_dict = dict.clone();
+        //let mut cur_dict = dict.clone();
         let ins = ValueDict::from_yml(file_path).owe_res()?;
-        Ok(ins.eval_import(&mut cur_dict))
+        Ok(ins.env_eval(dict))
     }
 
+    /*
     fn eval_import(self, dict: &mut ValueDict) -> Self {
         let mut map = ValueMap::new();
         for (k, v) in self.dict {
@@ -71,6 +83,7 @@ impl ValueDict {
         }
         Self { dict: map }
     }
+    */
 }
 
 #[cfg(test)]

@@ -4,4 +4,8 @@ mod  envs {
   }
 }
 mod main  : ver_adm {
+  #[auto_load(exit)]
+  flow _ver_app {
+    gx.cmd (  "cargo semver set ${VERSION}" );
+  }
 }
