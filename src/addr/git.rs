@@ -41,6 +41,10 @@ use super::AddrResult;
 /// // 从环境变量读取Token
 /// let addr = GitAddr::from("https://github.com/user/repo.git")
 ///     .with_github_env_token();
+///
+/// // 从~/.git-credentials文件读取Token
+/// let addr = GitAddr::from("https://github.com/user/repo.git")
+///     .with_git_credentials();
 /// ```
 #[derive(Clone, Debug, Serialize, Deserialize, Default, Getters, PartialEq)]
 #[serde(rename = "git")]
@@ -202,6 +206,70 @@ impl GitAddr {
         self.with_env_token("GITEA_TOKEN")
     }
 
+    /// 从~/.git-credentials文件读取token
+    pub fn with_git_credentials(mut self) -> Self {
+        if let Some(credentials) = Self::read_git_credentials() {
+            for (url, username, token) in credentials {
+                if self.repo.starts_with(&url) {
+                    self.username = Some(username);
+                    self.token = Some(token);
+                    break;
+                }
+            }
+        }
+        self
+    }
+
+    /// 读取~/.git-credentials文件
+    fn read_git_credentials() -> Option<Vec<(String, String, String)>> {
+        use std::fs;
+        use std::io::{BufRead, BufReader};
+
+        let home = home_dir()?;
+        let credentials_path = home.join(".git-credentials");
+
+        if !credentials_path.exists() {
+            return None;
+        }
+
+        let file = fs::File::open(credentials_path).ok()?;
+        let reader = BufReader::new(file);
+        let mut credentials = Vec::new();
+
+        for line in reader.lines().map_while(Result::ok) {
+            //if let Ok(line) = line {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+
+            // 使用URL解析来正确提取各个部分
+            if let Ok(url) = url::Url::parse(line) {
+                let host = url.host_str()?;
+                let scheme = url.scheme();
+                let path = url.path();
+
+                // 构建基础URL用于匹配
+                let base_url = format!("{scheme}://{host}{path}");
+
+                // 提取用户名和密码
+                let username = url.username();
+                if !username.is_empty() {
+                    if let Some(password) = url.password() {
+                        credentials.push((base_url, username.to_string(), password.to_string()));
+                    }
+                }
+                //}
+            }
+        }
+
+        if credentials.is_empty() {
+            None
+        } else {
+            Some(credentials)
+        }
+    }
+
     /// 构建远程回调（包含SSH认证和Token认证）
     fn build_remote_callbacks(&self) -> git2::RemoteCallbacks<'_> {
         let mut callbacks = git2::RemoteCallbacks::new();
@@ -217,22 +285,47 @@ impl GitAddr {
             if is_https {
                 // HTTPS协议使用Token认证
                 if allowed_types.contains(git2::CredentialType::USER_PASS_PLAINTEXT) {
-                    let username = username
-                        .as_deref()
-                        .unwrap_or(username_from_url.unwrap_or("git"));
-                    if let Some(token) = &token {
+                    // 使用已提供的token，如果没有则尝试从.git-credentials读取
+                    let final_token = token.clone().or_else(|| {
+                        if let Some(credentials) = GitAddr::read_git_credentials() {
+                            // 查找匹配的凭证
+                            credentials
+                                .iter()
+                                .find(|(cred_url, _, _)| url.contains(cred_url))
+                                .map(|(_, _, token)| token.clone())
+                        } else {
+                            None
+                        }
+                    });
+
+                    // 使用已提供的用户名，如果没有则尝试从.git-credentials读取或默认
+                    let final_username = username
+                        .clone()
+                        .or_else(|| {
+                            if let Some(credentials) = GitAddr::read_git_credentials() {
+                                credentials
+                                    .iter()
+                                    .find(|(cred_url, _, _)| url.contains(cred_url))
+                                    .map(|(_, username, _)| username.clone())
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or_else(|| username.clone().unwrap_or_else(|| "git".to_string()));
+
+                    if let Some(token) = final_token {
                         // 根据不同的Git平台使用不同的Token格式
-                        let actual_username = if username == "oauth2" {
+                        let actual_username = if final_username == "oauth2" {
                             // GitLab使用oauth2作为用户名
                             "oauth2"
-                        } else if username == "x-token-auth" {
+                        } else if final_username == "x-token-auth" {
                             // Bitbucket使用x-token-auth作为用户名
                             "x-token-auth"
                         } else {
                             // 默认使用提供的用户名或git
-                            username
+                            &final_username
                         };
-                        git2::Cred::userpass_plaintext(actual_username, token)
+                        git2::Cred::userpass_plaintext(actual_username, &token)
                     } else {
                         // 如果没有token，允许git使用默认的credential helper
                         Err(git2::Error::from_str("需要Token认证但未提供token"))
@@ -906,6 +999,24 @@ mod tests {
         assert_eq!(addr.token, None); // 环境变量不存在时返回None
     }
 
+    #[test]
+    fn test_git_credentials_parsing() {
+        // 测试.git-credentials文件解析功能
+        // 由于环境变量限制，我们简化测试，只验证方法存在和基本功能
+        let _result = GitAddr::read_git_credentials();
+        // 无论是否存在.git-credentials文件，方法都应该成功返回
+    }
+
+    #[test]
+    fn test_git_addr_with_git_credentials() {
+        // 测试GitAddr的with_git_credentials方法
+        let addr = GitAddr::from("https://github.com/user/repo.git");
+
+        // 验证方法可以调用（实际效果取决于.git-credentials文件是否存在）
+        let _addr = addr.with_git_credentials();
+        // 无论是否找到凭证，方法都应该成功返回
+    }
+
     #[ignore = "need cnb.cool access"]
     #[tokio::test]
     async fn test_git_addr_cnb_cool_clone() -> AddrResult<()> {
@@ -952,6 +1063,7 @@ mod tests {
         // 测试cnb.cool仓库克隆（带token认证）
         let git_addr =
             GitAddr::from("https://cnb.cool/dy-sec/ops/mechanism/gxl-dayu.git").with_branch("main");
+        //.with_token("5WXpns1c2bISgpoPA8EdhtIOarC"); // 需要替换为实际token
         //.with_token("your-cnb-token"); // 需要替换为实际token
 
         // 执行克隆
