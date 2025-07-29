@@ -16,7 +16,12 @@ pub struct Artifact {
     origin_addr: AddrType,
     #[serde(skip_serializing_if = "Option::is_none")]
     cache_addr: Option<AddrType>,
+    #[serde(default = "default_cache_enable")]
+    cache_enable : bool,
     local: String,
+}
+fn default_cache_enable() -> bool{
+    false
 }
 
 impl Artifact {
@@ -26,6 +31,7 @@ impl Artifact {
             version: version.into(),
             origin_addr: addr.into(),
             cache_addr: None,
+            cache_enable: false,
             local: local.into(),
         }
     }
@@ -103,6 +109,7 @@ mod tests {
             version: "0.1.0".to_string(),
             origin_addr: deploy_type,
             cache_addr: Some(cache_addr),
+            cache_enable: false,
             local: "galaxy-init".to_string(),
         };
         Ok(())
