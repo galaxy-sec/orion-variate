@@ -3,19 +3,23 @@ use crate::addr::AddrType;
 use crate::predule::*;
 use crate::types::LocalUpdate;
 use crate::update::UpdateOptions;
-use derive_getters::Getters;
 use serde_derive::{Deserialize, Serialize};
-
+use getset::Getters;
+use getset::Setters;
+use getset::WithSetters;
 use orion_error::ErrorOwe;
 use std::path::Path;
-#[derive(Getters, Clone, Debug, Deserialize, Serialize)]
+#[derive(Getters, Clone, Debug, Deserialize, Serialize,Setters,WithSetters)]
+#[getset(get="pub" )]
 pub struct Artifact {
     name: String,
     version: String,
     #[serde(alias = "addr")]
     origin_addr: AddrType,
+    #[getset(set_with="pub", set="pub")]
     #[serde(skip_serializing_if = "Option::is_none")]
     cache_addr: Option<AddrType>,
+    #[getset(set_with="pub", set="pub")]
     #[serde(default = "default_cache_enable")]
     cache_enable : bool,
     local: String,
@@ -111,7 +115,7 @@ mod tests {
             cache_addr: Some(cache_addr),
             cache_enable: false,
             local: "galaxy-init".to_string(),
-        };
+        }.with_cache_enable(true);
         Ok(())
     }
 }
