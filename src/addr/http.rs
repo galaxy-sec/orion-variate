@@ -1,5 +1,6 @@
-use crate::{predule::*, types::RemoteUpdate, update::UpdateOptions, vars::EnvDict};
+use crate::{addr::proxy::{serv::{Serv, ServHandle}, ProxyPath}, predule::*, types::RemoteUpdate, update::UpdateOptions, vars::EnvDict};
 
+use getset::{Getters, WithSetters};
 use orion_error::UvsResFrom;
 use tokio::io::AsyncWriteExt;
 use tracing::info;
@@ -9,7 +10,8 @@ use crate::{types::LocalUpdate, vars::EnvEvalable};
 
 use super::AddrResult;
 
-#[derive(Getters, Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Getters, Clone, Debug, Serialize, Deserialize,WithSetters)]
+#[getset(get = "pub")]
 #[serde(rename = "http")]
 pub struct HttpAddr {
     url: String,
@@ -17,7 +19,20 @@ pub struct HttpAddr {
     username: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     password: Option<String>,
+    #[getset(set_with = "pub")]
+    #[serde(skip)]
+    proxy: Option<Serv>,
 }
+
+impl PartialEq for HttpAddr {
+    fn eq(&self, other: &Self) -> bool {
+        self.url == other.url
+            && self.username == other.username
+            && self.password == other.password
+    }
+}
+
+impl Eq for HttpAddr {}
 
 impl EnvEvalable<HttpAddr> for HttpAddr {
     fn env_eval(self, dict: &EnvDict) -> HttpAddr {
@@ -25,6 +40,7 @@ impl EnvEvalable<HttpAddr> for HttpAddr {
             url: self.url.env_eval(dict),
             username: self.username.env_eval(dict),
             password: self.password.env_eval(dict),
+            proxy: self.proxy,
         }
     }
 }
@@ -35,6 +51,7 @@ impl HttpAddr {
             url: url.into(),
             username: None,
             password: None,
+            proxy: None,
         }
     }
 
@@ -125,11 +142,34 @@ impl HttpAddr {
         let mut ctx = WithContext::want("download url");
         ctx.with("url", self.url());
         let client = reqwest::Client::new();
-        let mut request = client.get(&self.url);
+        let mut request  =if let Some(proxy) = &self.proxy {
+            let proxy_path = proxy.proxy(&self.url);
+            let mut request = client.get(proxy_path.path());
+            match proxy_path {
+                ProxyPath::Origin(_) => {
+                    if let (Some(u), Some(p)) = (&self.username, &self.password) {
+                        request = request.basic_auth(u, Some(p));
+                    }
 
-        if let (Some(u), Some(p)) = (&self.username, &self.password) {
-            request = request.basic_auth(u, Some(p));
+                }
+                ProxyPath::Proxy(_, auth_opt) => {
+                    if let Some(auth) = auth_opt {
+                        request = request.basic_auth(auth.username(), Some(auth.password()));
+                    }
+
+                }
+            }
+            request
         }
+        else {
+             let mut request = client.get(&self.url);
+            if let (Some(u), Some(p)) = (&self.username, &self.password) {
+                request = request.basic_auth(u, Some(p));
+            }
+            request
+        };
+        //let mut request = client.get(&self.url);
+
 
         println!("donwload :{}", self.url());
         let mut response = request.send().await.owe_res().with(&ctx)?;

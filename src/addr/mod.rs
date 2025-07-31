@@ -10,5 +10,6 @@ pub use local::path_file_name;
 pub use local::rename_path;
 pub use types::AddrType;
 pub mod error;
+pub mod proxy;
 
 pub use error::{AddrError, AddrReason, AddrResult};
