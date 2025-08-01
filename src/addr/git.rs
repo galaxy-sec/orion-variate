@@ -1,3 +1,5 @@
+use crate::addr::proxy::serv::Serv;
+use crate::addr::proxy::{Auth, ProxyPath};
 use crate::types::RemoteUpdate;
 use crate::vars::EnvEvalable;
 use crate::{
@@ -5,6 +7,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use fs_extra::dir::CopyOptions;
+use getset::{Setters,Getters};
 use git2::{
     BranchType, FetchOptions, MergeOptions, PushOptions, RemoteUpdateFlags, Repository, ResetType,
     build::{CheckoutBuilder, RepoBuilder},
@@ -46,7 +49,8 @@ use super::AddrResult;
 /// let addr = GitAddr::from("https://github.com/user/repo.git")
 ///     .with_git_credentials();
 /// ```
-#[derive(Clone, Debug, Serialize, Deserialize, Default, Getters, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default, Getters, Setters)]
+#[getset(get = "pub", set = "pub")]
 #[serde(rename = "git")]
 pub struct GitAddr {
     repo: String,
@@ -72,6 +76,15 @@ pub struct GitAddr {
     // 新增：用户名（用于Token认证）
     #[serde(skip_serializing_if = "Option::is_none")]
     username: Option<String>,
+    #[getset( set_with = "pub")]
+    #[serde(skip)]
+    proxy: Option<Serv>,
+}
+
+impl PartialEq for GitAddr {
+    fn eq(&self, other: &Self) -> bool {
+        self.repo == other.repo
+    }
 }
 impl EnvEvalable<GitAddr> for GitAddr {
     fn env_eval(self, dict: &EnvDict) -> GitAddr {
@@ -86,6 +99,7 @@ impl EnvEvalable<GitAddr> for GitAddr {
             ssh_passphrase: self.ssh_passphrase.env_eval(dict),
             token: self.token.env_eval(dict),
             username: self.username.env_eval(dict),
+            proxy: self.proxy,
         }
     }
 }
@@ -271,12 +285,13 @@ impl GitAddr {
     }
 
     /// 构建远程回调（包含SSH认证和Token认证）
-    fn build_remote_callbacks(&self) -> git2::RemoteCallbacks<'_> {
+    fn build_remote_callbacks(&self ) -> git2::RemoteCallbacks<'_> {
         let mut callbacks = git2::RemoteCallbacks::new();
         let ssh_key = self.ssh_key.clone();
         let ssh_passphrase = self.ssh_passphrase.clone();
-        let token = self.token.clone();
-        let username = self.username.clone();
+        let proxy_auth = self.get_proxy_auth();
+        let token = proxy_auth.clone().map(|auth| auth.password().clone()).or(self.token.clone());
+        let username = proxy_auth.clone().map(|auth| auth.username().clone()).or(self.username.clone());
 
         callbacks.credentials(move |url, username_from_url, allowed_types| {
             // 检查URL类型，决定使用哪种认证方式
@@ -629,6 +644,18 @@ impl GitAddr {
 
     /// 克隆新仓库
     fn clone_repo(&self, target_dir: &Path) -> Result<(), git2::Error> {
+
+        let repo = if let Some(proxy) = &self.proxy {
+            match proxy.proxy(&self.repo) {
+                ProxyPath::Origin(path) => path,
+                ProxyPath::Proxy(path, _auth) => {
+                    path
+                }
+            }
+        }
+        else {
+            self.repo.clone()
+        };
         // 准备回调以支持认证
         //
         let callbacks = self.build_remote_callbacks(); // 使用构建的回调
@@ -642,14 +669,40 @@ impl GitAddr {
         builder.fetch_options(fetch_options);
 
         // 执行克隆
-        let repo = builder.clone(&self.repo, target_dir)?;
+        let repo = builder.clone(&repo, target_dir)?;
 
         // 处理检出目标
         self.checkout_target(&repo)
     }
 
+    fn  get_proxy_auth(&self)  -> Option<Auth> {
+
+        if let Some(proxy) = &self.proxy {
+            match proxy.proxy(&self.repo) {
+                ProxyPath::Origin(_path) => {},
+                ProxyPath::Proxy(_path, auth) => {
+                    return auth;
+                }
+            }
+        }
+        None
+    }
     /// 获取远程更新
     fn fetch_updates(&self, repo: &Repository) -> Result<(), git2::Error> {
+
+        let mut proxy_auth = None;
+        let _repo_url = if let Some(proxy) = &self.proxy {
+            match proxy.proxy(&self.repo) {
+                ProxyPath::Origin(path) => path,
+                ProxyPath::Proxy(path, auth) => {
+                    proxy_auth = auth;
+                    path
+                }
+            }
+        }
+        else {
+            self.repo.clone()
+        };
         // 查找 origin 远程
         let mut remote = repo.find_remote("origin")?;
 
