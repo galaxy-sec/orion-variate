@@ -1,7 +1,8 @@
-mod rule;
-mod unit;
 mod auth;
+mod rule;
 pub mod serv;
-pub use unit::ProxyPath;
+mod unit;
 pub use auth::Auth;
-
+pub use rule::Rule;
+pub use unit::ProxyPath;
+pub use unit::Unit;

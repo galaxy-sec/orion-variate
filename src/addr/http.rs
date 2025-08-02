@@ -1,4 +1,13 @@
-use crate::{addr::proxy::{serv::{Serv, ServHandle}, ProxyPath}, predule::*, types::RemoteUpdate, update::UpdateOptions, vars::EnvDict};
+use crate::{
+    addr::proxy::{
+        ProxyPath,
+        serv::{Serv, ServHandle},
+    },
+    predule::*,
+    types::RemoteUpdate,
+    update::UpdateOptions,
+    vars::EnvDict,
+};
 
 use getset::{Getters, WithSetters};
 use orion_error::UvsResFrom;
@@ -10,7 +19,7 @@ use crate::{types::LocalUpdate, vars::EnvEvalable};
 
 use super::AddrResult;
 
-#[derive(Getters, Clone, Debug, Serialize, Deserialize,WithSetters)]
+#[derive(Getters, Clone, Debug, Serialize, Deserialize, WithSetters)]
 #[getset(get = "pub")]
 #[serde(rename = "http")]
 pub struct HttpAddr {
@@ -26,9 +35,7 @@ pub struct HttpAddr {
 
 impl PartialEq for HttpAddr {
     fn eq(&self, other: &Self) -> bool {
-        self.url == other.url
-            && self.username == other.username
-            && self.password == other.password
+        self.url == other.url && self.username == other.username && self.password == other.password
     }
 }
 
@@ -142,27 +149,25 @@ impl HttpAddr {
         let mut ctx = WithContext::want("download url");
         ctx.with("url", self.url());
         let client = reqwest::Client::new();
-        let mut request  =if let Some(proxy) = &self.proxy {
+        let mut request = if let Some(proxy) = &self.proxy {
             let proxy_path = proxy.proxy(&self.url);
             let mut request = client.get(proxy_path.path());
+            println!("request url:{}", proxy_path.path());
             match proxy_path {
                 ProxyPath::Origin(_) => {
                     if let (Some(u), Some(p)) = (&self.username, &self.password) {
                         request = request.basic_auth(u, Some(p));
                     }
-
                 }
                 ProxyPath::Proxy(_, auth_opt) => {
                     if let Some(auth) = auth_opt {
                         request = request.basic_auth(auth.username(), Some(auth.password()));
                     }
-
                 }
             }
             request
-        }
-        else {
-             let mut request = client.get(&self.url);
+        } else {
+            let mut request = client.get(&self.url);
             if let (Some(u), Some(p)) = (&self.username, &self.password) {
                 request = request.basic_auth(u, Some(p));
             }
@@ -170,8 +175,6 @@ impl HttpAddr {
         };
         //let mut request = client.get(&self.url);
 
-
-        println!("donwload :{}", self.url());
         let mut response = request.send().await.owe_res().with(&ctx)?;
 
         if !response.status().is_success() {
@@ -241,7 +244,13 @@ impl RemoteUpdate for HttpAddr {
 
 #[cfg(test)]
 mod tests {
-    use crate::{addr::AddrResult, update::UpdateOptions};
+    use crate::{
+        addr::{
+            AddrResult,
+            proxy::{Auth, Rule, Unit},
+        },
+        update::UpdateOptions,
+    };
 
     use super::*;
     use httpmock::{Method::GET, MockServer};
@@ -269,6 +278,49 @@ mod tests {
             "generic-1747535977632",
             "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
         );
+
+        http_addr
+            .update_local(&temp_dir, &UpdateOptions::for_test())
+            .await?;
+
+        // 3. 验证结果
+        assert!(test_file.exists());
+        mock.assert();
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_http_auth_download_with_proxy() -> AddrResult<()> {
+        // 1. 配置模拟服务器
+        let server = MockServer::start();
+        let mock = server.mock(|when, then| {
+            when.method(GET)
+                .path("/success.txt")
+                .header("Authorization", "Basic Z2VuZXJpYy0xNzQ3NTM1OTc3NjMyOjViMmM5ZTliN2YxMTFhZjUyZjAzNzVjMWZkOWQzNWNkNGQwZGFiYzM=");
+    then.status(200)
+        .header("content-type", "text/html; charset=UTF-8")
+        .body("download success");
+        });
+
+        // 2. 执行下载
+        let temp_dir = PathBuf::from("./test/temp");
+        let test_file = temp_dir.join("success.txt");
+        if test_file.exists() {
+            std::fs::remove_file(&test_file).owe_res()?;
+        }
+        let proxy = Serv::from_rule(
+            Rule::new(server.url("/unkonw*"), server.url("/success")),
+            Some(Auth::new(
+                "generic-1747535977632",
+                "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
+            )),
+        );
+        let http_addr = HttpAddr::from(server.url("/unkonw.txt"))
+            //.with_credentials(
+            //    "generic-1747535977632",
+            //    "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
+            //)
+            .with_proxy(Some(proxy));
 
         http_addr
             .update_local(&temp_dir, &UpdateOptions::for_test())
