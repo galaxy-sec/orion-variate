@@ -1895,7 +1895,7 @@ dependencies = [
 
 [[package]]
 name = "orion_variate"
-version = "0.5.7"
+version = "0.5.8"
 dependencies = [
  "anyhow",
  "async-trait",

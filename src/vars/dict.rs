@@ -21,7 +21,9 @@ impl EnvEvalable<ValueMap> for ValueMap {
         let mut vmap = ValueMap::new();
         for (k, v) in self {
             let e_v = v.env_eval(&cur_dict);
-            cur_dict.insert(k.clone(), e_v.clone());
+            if !cur_dict.contains_key(&k) {
+                cur_dict.insert(k.clone(), e_v.clone());
+            }
             vmap.insert(k, e_v);
         }
         vmap
