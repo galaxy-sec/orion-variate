@@ -2,12 +2,12 @@ use std::rc::Rc;
 
 use getset::Getters;
 
-use crate::addr::proxy::{
+use crate::addr::redirect::{
     auth::Auth,
     unit::{ProxyPath, Unit},
 };
 
-use super::rule::{self, Rule};
+use super::rule::Rule;
 
 #[derive(Clone, Debug, Getters)]
 #[getset(get = "pub")]

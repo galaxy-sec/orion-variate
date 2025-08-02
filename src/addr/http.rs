@@ -1,8 +1,5 @@
 use crate::{
-    addr::proxy::{
-        ProxyPath,
-        serv::{Serv, ServHandle},
-    },
+    addr::redirect::{ProxyPath, serv::Serv},
     predule::*,
     types::RemoteUpdate,
     update::UpdateOptions,
@@ -30,7 +27,7 @@ pub struct HttpAddr {
     password: Option<String>,
     #[getset(set_with = "pub")]
     #[serde(skip)]
-    proxy: Option<Serv>,
+    redirect: Option<Serv>,
 }
 
 impl PartialEq for HttpAddr {
@@ -47,7 +44,7 @@ impl EnvEvalable<HttpAddr> for HttpAddr {
             url: self.url.env_eval(dict),
             username: self.username.env_eval(dict),
             password: self.password.env_eval(dict),
-            proxy: self.proxy,
+            redirect: self.redirect,
         }
     }
 }
@@ -58,7 +55,7 @@ impl HttpAddr {
             url: url.into(),
             username: None,
             password: None,
-            proxy: None,
+            redirect: None,
         }
     }
 
@@ -70,7 +67,12 @@ impl HttpAddr {
 }
 impl HttpAddr {
     pub fn get_filename(&self) -> Option<String> {
-        let url = Url::parse(&self.url).ok()?;
+        let url_str = self
+            .redirect
+            .as_ref()
+            .map(|x| x.proxy(self.url.as_str()).path().to_string())
+            .unwrap_or(self.url.clone());
+        let url = Url::parse(url_str.as_str()).ok()?;
         url.path_segments()?.next_back().and_then(|s| {
             if s.is_empty() {
                 None
@@ -149,7 +151,7 @@ impl HttpAddr {
         let mut ctx = WithContext::want("download url");
         ctx.with("url", self.url());
         let client = reqwest::Client::new();
-        let mut request = if let Some(proxy) = &self.proxy {
+        let request = if let Some(proxy) = &self.redirect {
             let proxy_path = proxy.proxy(&self.url);
             let mut request = client.get(proxy_path.path());
             println!("request url:{}", proxy_path.path());
@@ -247,7 +249,7 @@ mod tests {
     use crate::{
         addr::{
             AddrResult,
-            proxy::{Auth, Rule, Unit},
+            redirect::{Auth, Rule},
         },
         update::UpdateOptions,
     };
@@ -315,12 +317,7 @@ mod tests {
                 "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
             )),
         );
-        let http_addr = HttpAddr::from(server.url("/unkonw.txt"))
-            //.with_credentials(
-            //    "generic-1747535977632",
-            //    "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
-            //)
-            .with_proxy(Some(proxy));
+        let http_addr = HttpAddr::from(server.url("/unkonw.txt")).with_redirect(Some(proxy));
 
         http_addr
             .update_local(&temp_dir, &UpdateOptions::for_test())
