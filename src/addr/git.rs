@@ -171,6 +171,13 @@ impl GitAddr {
         self
     }
 
+    /// 从环境变量自动加载代理配置
+    /// 支持 https_proxy, http_proxy, all_proxy 等标准环境变量
+    pub fn with_proxy_from_env(mut self) -> Self {
+        self.proxy = ProxyConfig::from_standard_env();
+        self
+    }
+
     /// 为GitHub设置Token认证（便捷方法）
     /// GitHub使用用户名+Token作为密码的方式
     pub fn with_github_token<S: Into<String>>(mut self, token: S) -> Self {
@@ -304,22 +311,7 @@ impl GitAddr {
             .map(|auth| auth.username().clone())
             .or(self.username.clone());
 
-        // 配置代理
-        if let Some(proxy) = &self.proxy {
-            let mut proxy_options = git2::ProxyOptions::new();
-            proxy_options.url(proxy.url().as_str());
-            
-            // 设置代理认证
-            if let Some(auth) = &proxy.auth {
-                let username = auth.username().clone();
-                let password = auth.password().clone();
-                proxy_options.set_credentials(move |url, username_from_url| {
-                    Ok((username.clone(), password.clone()))
-                });
-            }
-            
-            callbacks.proxy_options(proxy_options);
-        }
+
 
         callbacks.credentials(move |url, username_from_url, allowed_types| {
             // 检查URL类型，决定使用哪种认证方式
@@ -697,6 +689,13 @@ impl GitAddr {
         let mut fetch_options = FetchOptions::new();
         fetch_options.remote_callbacks(callbacks);
 
+        // 配置代理选项
+        if let Some(proxy_config) = &self.proxy {
+            let mut proxy_options = git2::ProxyOptions::new();
+            proxy_options.url(proxy_config.url().as_str());
+            fetch_options.proxy_options(proxy_options);
+        }
+
         // 准备克隆选项
         let mut builder = RepoBuilder::new();
         builder.fetch_options(fetch_options);
@@ -730,6 +729,13 @@ impl GitAddr {
         // 配置获取选项
         let mut fetch_options = FetchOptions::new();
         fetch_options.remote_callbacks(callbacks);
+
+        // 配置代理选项
+        if let Some(proxy_config) = &self.proxy {
+            let mut proxy_options = git2::ProxyOptions::new();
+            proxy_options.url(proxy_config.url().as_str());
+            fetch_options.proxy_options(proxy_options);
+        }
 
         // 执行获取操作
         remote.fetch(&[] as &[&str], Some(&mut fetch_options), None)?;
@@ -862,6 +868,13 @@ impl GitAddr {
         // 设置认证信息
         let mut push_options = PushOptions::new();
         push_options.remote_callbacks(self.build_remote_callbacks());
+
+        // 配置代理选项
+        if let Some(proxy_config) = &self.proxy {
+            let mut proxy_options = git2::ProxyOptions::new();
+            proxy_options.url(proxy_config.url().as_str());
+            push_options.proxy_options(proxy_options);
+        }
         origin.push(
             &[&format!("{branch_path}:{branch_path}",)],
             Some(&mut push_options),

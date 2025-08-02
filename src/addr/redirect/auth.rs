@@ -1,6 +1,6 @@
 use getset::Getters;
 use serde_derive::{Deserialize, Serialize};
-#[derive(Debug, Clone, Serialize, Deserialize, Getters)]
+#[derive(Debug, Clone, Serialize, Deserialize, Getters, PartialEq)]
 #[getset(get = "pub")]
 pub struct Auth {
     username: String,
