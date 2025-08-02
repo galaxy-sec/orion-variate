@@ -36,7 +36,7 @@ impl ProxyConfig {
             .or_else(|_| std::env::var("all_proxy"))
             .or_else(|_| std::env::var("ALL_PROXY"))
             .ok()?;
-        
+
         Self::parse_url(&proxy_url)
     }
 
@@ -52,11 +52,7 @@ impl ProxyConfig {
         let password = url.password().map(|p| p.to_string());
 
         // 若 URL 中已包含认证信息，直接使用
-        let auth = if let Some(password) = password {
-            Some(Auth::new(username, password))
-        } else {
-            None
-        };
+        let auth = password.map(|password| Auth::new(username, password));
 
         Some(Self {
             url,
@@ -124,9 +120,12 @@ mod tests {
     #[test]
     fn test_parse_url_with_auth() {
         let config = ProxyConfig::parse_url("http://user:pass@proxy.example.com:8080").unwrap();
-        assert_eq!(config.url().as_str(), "http://user:pass@proxy.example.com:8080/");
+        assert_eq!(
+            config.url().as_str(),
+            "http://user:pass@proxy.example.com:8080/"
+        );
         assert_eq!(config.proxy_type(), &Some(ProxyType::Http));
-        
+
         let auth = config.auth().as_ref().unwrap();
         assert_eq!(auth.username(), "user");
         assert_eq!(auth.password(), "pass");

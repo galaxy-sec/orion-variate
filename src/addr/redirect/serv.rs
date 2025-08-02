@@ -1,7 +1,4 @@
-use std::{
-    path::{Path, PathBuf},
-    rc::Rc,
-};
+use std::{path::PathBuf, rc::Rc};
 
 use getset::Getters;
 use orion_common::serde::Yamlable;
@@ -91,8 +88,6 @@ mod tests {
     #[test]
     fn test_serv_serialization_yaml_format() {
         let rules = vec![Rule::new("https://example.com/*", "https://proxy.com/")];
-        let unit = Unit::new(rules, None);
-        let serv = Serv::new(vec![unit], true);
 
         let yaml_content = r#"
 units:

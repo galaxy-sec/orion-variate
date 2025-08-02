@@ -139,4 +139,92 @@ mod tests {
         let content = serde_json::to_string(&dict).unwrap();
         println!("{content}",);
     }
+
+    #[test]
+    fn test_value_map_env_eval() {
+        // 创建环境字典
+        let mut env_dict = EnvDict::new();
+        env_dict.insert("env_key1".to_string(), ValueType::from("env_value1"));
+        env_dict.insert("ENV_KEY2".to_string(), ValueType::from("env_value2"));
+
+        // 创建ValueMap
+        let mut value_map = ValueMap::new();
+        value_map.insert("key1".to_string(), ValueType::from("value1"));
+        value_map.insert("KEY2".to_string(), ValueType::from("${env_key1}-${key1}"));
+        value_map.insert("KEY3".to_string(), ValueType::from("${ENV_KEY2}-${KEY2}"));
+        value_map.insert(
+            "key4".to_string(),
+            ValueType::from("${undefined_key:default_value}"),
+        );
+
+        // 执行env_eval
+        let result = value_map.env_eval(&env_dict);
+
+        // 验证结果
+        assert_eq!(result.get("key1"), Some(&ValueType::from("value1")));
+        assert_eq!(
+            result.get("KEY2"),
+            Some(&ValueType::from("env_value1-value1"))
+        );
+        assert_eq!(
+            result.get("KEY3"),
+            Some(&ValueType::from("env_value2-env_value1-value1"))
+        );
+        assert_eq!(result.get("key4"), Some(&ValueType::from("default_value")));
+    }
+
+    #[test]
+    fn test_value_map_env_eval_single_var() {
+        // 设置环境变量
+        unsafe {
+            std::env::set_var("ENV_HOST", "env.example.com");
+        }
+        unsafe {
+            std::env::set_var("ENV_PORT", "9090");
+        }
+
+        // 创建环境字典
+        let mut env_dict = EnvDict::new();
+        env_dict.insert("host".to_string(), ValueType::from("example.com"));
+        env_dict.insert("port".to_string(), ValueType::from("8080"));
+
+        // 创建ValueMap，使用环境变量和字典变量
+        let mut value_map = ValueMap::new();
+        value_map.insert("config1".to_string(), ValueType::from("${host}"));
+        value_map.insert("config2".to_string(), ValueType::from("${ENV_HOST}"));
+        value_map.insert(
+            "config3".to_string(),
+            ValueType::from("prefix_${host}_suffix"),
+        );
+        value_map.insert(
+            "config4".to_string(),
+            ValueType::from("prefix_${ENV_HOST}_suffix"),
+        );
+
+        // 执行env_eval
+        let result = value_map.env_eval(&env_dict);
+
+        // 验证结果
+        assert_eq!(result.get("config1"), Some(&ValueType::from("example.com")));
+        assert_eq!(
+            result.get("config2"),
+            Some(&ValueType::from("env.example.com"))
+        );
+        assert_eq!(
+            result.get("config3"),
+            Some(&ValueType::from("prefix_example.com_suffix"))
+        );
+        assert_eq!(
+            result.get("config4"),
+            Some(&ValueType::from("prefix_env.example.com_suffix"))
+        );
+
+        // 清理环境变量
+        unsafe {
+            std::env::remove_var("ENV_HOST");
+        }
+        unsafe {
+            std::env::remove_var("ENV_PORT");
+        }
+    }
 }

@@ -311,8 +311,6 @@ impl GitAddr {
             .map(|auth| auth.username().clone())
             .or(self.username.clone());
 
-
-
         callbacks.credentials(move |url, username_from_url, allowed_types| {
             // 检查URL类型，决定使用哪种认证方式
             let is_https = url.starts_with("https://");

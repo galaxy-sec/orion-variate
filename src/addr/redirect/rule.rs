@@ -12,7 +12,7 @@ pub struct Rule {
 }
 
 impl Rule {
-    pub fn new<'a, S: AsRef<str>, S2: Into<String>>(matchs: S, target: S2) -> Self {
+    pub fn new<S: AsRef<str>, S2: Into<String>>(matchs: S, target: S2) -> Self {
         let pattern = matchs.as_ref().to_string();
         Self {
             matchs: WildMatch::new(&pattern),
