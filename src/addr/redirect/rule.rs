@@ -1,7 +1,9 @@
+use getset::Getters;
 use serde_derive::{Deserialize, Serialize};
 use wildmatch::WildMatch;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Getters)]
+#[getset(get = "pub")]
 pub struct Rule {
     #[serde(skip)]
     matchs: WildMatch,

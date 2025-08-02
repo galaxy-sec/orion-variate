@@ -13,3 +13,4 @@ pub mod error;
 pub mod redirect;
 
 pub use error::{AddrError, AddrReason, AddrResult};
+pub mod proxy;

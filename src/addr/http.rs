@@ -1,5 +1,8 @@
 use crate::{
-    addr::redirect::{ProxyPath, serv::Serv},
+    addr::{
+        proxy::create_http_client,
+        redirect::{DirectPath, serv::Serv},
+    },
     predule::*,
     types::RemoteUpdate,
     update::UpdateOptions,
@@ -70,7 +73,7 @@ impl HttpAddr {
         let url_str = self
             .redirect
             .as_ref()
-            .map(|x| x.proxy(self.url.as_str()).path().to_string())
+            .map(|x| x.redirect(self.url.as_str()).path().to_string())
             .unwrap_or(self.url.clone());
         let url = Url::parse(url_str.as_str()).ok()?;
         url.path_segments()?.next_back().and_then(|s| {
@@ -88,7 +91,7 @@ impl HttpAddr {
         use indicatif::{ProgressBar, ProgressStyle};
         let mut ctx = WithContext::want("upload url");
 
-        let client = reqwest::Client::new();
+        let client = create_http_client();
         let file_name = self
             .get_filename()
             .unwrap_or_else(|| "file.bin".to_string());
@@ -150,18 +153,19 @@ impl HttpAddr {
         }
         let mut ctx = WithContext::want("download url");
         ctx.with("url", self.url());
-        let client = reqwest::Client::new();
-        let request = if let Some(proxy) = &self.redirect {
-            let proxy_path = proxy.proxy(&self.url);
+        //let client = reqwest::Client::new();
+        let client = create_http_client();
+        let request = if let Some(director) = &self.redirect {
+            let proxy_path = director.redirect(&self.url);
             let mut request = client.get(proxy_path.path());
             println!("request url:{}", proxy_path.path());
             match proxy_path {
-                ProxyPath::Origin(_) => {
+                DirectPath::Origin(_) => {
                     if let (Some(u), Some(p)) = (&self.username, &self.password) {
                         request = request.basic_auth(u, Some(p));
                     }
                 }
-                ProxyPath::Proxy(_, auth_opt) => {
+                DirectPath::Proxy(_, auth_opt) => {
                     if let Some(auth) = auth_opt {
                         request = request.basic_auth(auth.username(), Some(auth.password()));
                     }
@@ -292,7 +296,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn test_http_auth_download_with_proxy() -> AddrResult<()> {
+    async fn test_http_auth_download_with_redirect() -> AddrResult<()> {
         // 1. 配置模拟服务器
         let server = MockServer::start();
         let mock = server.mock(|when, then| {
@@ -310,14 +314,14 @@ mod tests {
         if test_file.exists() {
             std::fs::remove_file(&test_file).owe_res()?;
         }
-        let proxy = Serv::from_rule(
+        let redirect = Serv::from_rule(
             Rule::new(server.url("/unkonw*"), server.url("/success")),
             Some(Auth::new(
                 "generic-1747535977632",
                 "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
             )),
         );
-        let http_addr = HttpAddr::from(server.url("/unkonw.txt")).with_redirect(Some(proxy));
+        let http_addr = HttpAddr::from(server.url("/unkonw.txt")).with_redirect(Some(redirect));
 
         http_addr
             .update_local(&temp_dir, &UpdateOptions::for_test())

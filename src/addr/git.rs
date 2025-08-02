@@ -1,5 +1,5 @@
 use crate::addr::redirect::serv::Serv;
-use crate::addr::redirect::{Auth, ProxyPath};
+use crate::addr::redirect::{Auth, DirectPath};
 use crate::types::RemoteUpdate;
 use crate::vars::EnvEvalable;
 use crate::{
@@ -7,7 +7,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use fs_extra::dir::CopyOptions;
-use getset::{Getters, Setters};
+use getset::{Getters, Setters, WithSetters};
 use git2::{
     BranchType, FetchOptions, MergeOptions, PushOptions, RemoteUpdateFlags, Repository, ResetType,
     build::{CheckoutBuilder, RepoBuilder},
@@ -19,6 +19,7 @@ use orion_infra::auto_exit_log;
 use orion_infra::path::ensure_path;
 
 use super::AddrResult;
+use super::proxy::ProxyConfig;
 
 ///
 /// 支持通过SSH和HTTPS协议访问Git仓库
@@ -49,7 +50,7 @@ use super::AddrResult;
 /// let addr = GitAddr::from("https://github.com/user/repo.git")
 ///     .with_git_credentials();
 /// ```
-#[derive(Clone, Debug, Serialize, Deserialize, Default, Getters, Setters)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default, Getters, Setters, WithSetters)]
 #[getset(get = "pub", set = "pub")]
 #[serde(rename = "git")]
 pub struct GitAddr {
@@ -78,7 +79,10 @@ pub struct GitAddr {
     username: Option<String>,
     #[getset(set_with = "pub")]
     #[serde(skip)]
-    proxy: Option<Serv>,
+    redirect: Option<Serv>,
+    #[getset(set_with = "pub")]
+    #[serde(skip)]
+    proxy: Option<ProxyConfig>,
 }
 
 impl PartialEq for GitAddr {
@@ -99,6 +103,7 @@ impl EnvEvalable<GitAddr> for GitAddr {
             ssh_passphrase: self.ssh_passphrase.env_eval(dict),
             token: self.token.env_eval(dict),
             username: self.username.env_eval(dict),
+            redirect: self.redirect,
             proxy: self.proxy,
         }
     }
@@ -289,7 +294,7 @@ impl GitAddr {
         let mut callbacks = git2::RemoteCallbacks::new();
         let ssh_key = self.ssh_key.clone();
         let ssh_passphrase = self.ssh_passphrase.clone();
-        let proxy_auth = self.get_proxy_auth();
+        let proxy_auth = self.get_redirect_auth();
         let token = proxy_auth
             .clone()
             .map(|auth| auth.password().clone())
@@ -298,6 +303,23 @@ impl GitAddr {
             .clone()
             .map(|auth| auth.username().clone())
             .or(self.username.clone());
+
+        // 配置代理
+        if let Some(proxy) = &self.proxy {
+            let mut proxy_options = git2::ProxyOptions::new();
+            proxy_options.url(proxy.url().as_str());
+            
+            // 设置代理认证
+            if let Some(auth) = &proxy.auth {
+                let username = auth.username().clone();
+                let password = auth.password().clone();
+                proxy_options.set_credentials(move |url, username_from_url| {
+                    Ok((username.clone(), password.clone()))
+                });
+            }
+            
+            callbacks.proxy_options(proxy_options);
+        }
 
         callbacks.credentials(move |url, username_from_url, allowed_types| {
             // 检查URL类型，决定使用哪种认证方式
@@ -650,10 +672,10 @@ impl GitAddr {
 
     /// 克隆新仓库
     fn clone_repo(&self, target_dir: &Path) -> Result<(), git2::Error> {
-        let repo = if let Some(proxy) = &self.proxy {
-            match proxy.proxy(&self.repo) {
-                ProxyPath::Origin(path) => path,
-                ProxyPath::Proxy(path, _auth) => path,
+        let repo_addr = if let Some(director) = &self.redirect {
+            match director.redirect(&self.repo) {
+                DirectPath::Origin(path) => path,
+                DirectPath::Proxy(path, _auth) => path,
             }
         } else {
             self.repo.clone()
@@ -662,6 +684,15 @@ impl GitAddr {
         //
         let callbacks = self.build_remote_callbacks(); // 使用构建的回调
 
+        let mut flag = auto_exit_log!(
+            info!(
+                target : "addr/git",
+                "clone {} to {} success!",  repo_addr.as_str()  , target_dir.display()         ),
+            error!(
+                target : "addr/git",
+                "clone {} to {} failed", repo_addr.as_str()  , target_dir.display()
+            )
+        );
         // 配置获取选项
         let mut fetch_options = FetchOptions::new();
         fetch_options.remote_callbacks(callbacks);
@@ -671,17 +702,18 @@ impl GitAddr {
         builder.fetch_options(fetch_options);
 
         // 执行克隆
-        let repo = builder.clone(&repo, target_dir)?;
+        let repo = builder.clone(&repo_addr, target_dir)?;
 
+        flag.mark_suc();
         // 处理检出目标
         self.checkout_target(&repo)
     }
 
-    fn get_proxy_auth(&self) -> Option<Auth> {
-        if let Some(proxy) = &self.proxy {
-            match proxy.proxy(&self.repo) {
-                ProxyPath::Origin(_path) => {}
-                ProxyPath::Proxy(_path, auth) => {
+    fn get_redirect_auth(&self) -> Option<Auth> {
+        if let Some(proxy) = &self.redirect {
+            match proxy.redirect(&self.repo) {
+                DirectPath::Origin(_path) => {}
+                DirectPath::Proxy(_path, auth) => {
                     return auth;
                 }
             }
@@ -690,18 +722,6 @@ impl GitAddr {
     }
     /// 获取远程更新
     fn fetch_updates(&self, repo: &Repository) -> Result<(), git2::Error> {
-        let mut proxy_auth = None;
-        let _repo_url = if let Some(proxy) = &self.proxy {
-            match proxy.proxy(&self.repo) {
-                ProxyPath::Origin(path) => path,
-                ProxyPath::Proxy(path, auth) => {
-                    proxy_auth = auth;
-                    path
-                }
-            }
-        } else {
-            self.repo.clone()
-        };
         // 查找 origin 远程
         let mut remote = repo.find_remote("origin")?;
 
@@ -876,6 +896,7 @@ fn find_default_ssh_key() -> Option<PathBuf> {
 }
 #[cfg(test)]
 mod tests {
+    use crate::addr::redirect::Rule;
     use crate::{addr::AddrResult, tools::test_init};
 
     use super::*;
@@ -955,6 +976,38 @@ mod tests {
             .await
             .assert();
         assert_eq!(git_up.position(), &dest_path.join("hello-word.git_main"));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_git_addr_pull_redirect() -> AddrResult<()> {
+        // 创建临时目录
+        test_init();
+        let dest_path = PathBuf::from("./test/temp/git3");
+        if dest_path.exists() {
+            std::fs::remove_dir_all(&dest_path).assert();
+        }
+        std::fs::create_dir_all(&dest_path).assert();
+        let redirect = Serv::from_rule(
+            Rule::new(
+                "https://github.com/galaxy-sec/hello-none*",
+                "https://github.com/galaxy-sec/hello-word*",
+            ),
+            Some(Auth::new(
+                "generic-1747535977632",
+                "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
+            )),
+        );
+
+        let git_addr = GitAddr::from("https://github.com/galaxy-sec/hello-none.git")
+            .with_branch("main")
+            .with_redirect(Some(redirect));
+        // 执行克隆
+        let git_up = git_addr
+            .update_local(&dest_path, &UpdateOptions::default())
+            .await
+            .assert();
+        assert_eq!(git_up.position(), &dest_path.join("hello-none.git_main"));
         Ok(())
     }
 

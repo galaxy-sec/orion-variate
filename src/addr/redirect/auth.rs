@@ -14,4 +14,10 @@ impl Auth {
             password: password.into(),
         }
     }
+    pub fn make_example() -> Self {
+        Self {
+            username: "galaxy".into(),
+            password: "this-is-password".into(),
+        }
+    }
 }

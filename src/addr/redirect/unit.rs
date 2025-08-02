@@ -1,29 +1,32 @@
 use crate::addr::redirect::{auth::Auth, rule::Rule};
 use derive_more::From;
+use getset::Getters;
 use serde_derive::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Getters)]
+#[getset(get = "pub")]
 pub struct Unit {
     rules: Vec<Rule>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     auth: Option<Auth>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, From)]
-pub enum ProxyPath {
+pub enum DirectPath {
     Origin(String),
     Proxy(String, Option<Auth>),
 }
-impl ProxyPath {
+impl DirectPath {
     pub fn path(&self) -> &str {
         match self {
-            ProxyPath::Origin(path) => path,
-            ProxyPath::Proxy(path, _) => path,
+            DirectPath::Origin(path) => path,
+            DirectPath::Proxy(path, _) => path,
         }
     }
     pub fn is_proxy(&self) -> bool {
         match self {
-            ProxyPath::Origin(_) => false,
-            ProxyPath::Proxy(_, _) => true,
+            DirectPath::Origin(_) => false,
+            DirectPath::Proxy(_, _) => true,
         }
     }
 }
@@ -31,14 +34,6 @@ impl ProxyPath {
 impl Unit {
     pub fn new(rules: Vec<Rule>, auth: Option<Auth>) -> Self {
         Self { rules, auth }
-    }
-
-    pub fn rules(&self) -> &[Rule] {
-        &self.rules
-    }
-
-    pub fn auth(&self) -> &Option<Auth> {
-        &self.auth
     }
 
     pub fn add_rule(&mut self, rule: Rule) {
@@ -49,14 +44,17 @@ impl Unit {
         self.auth = Some(auth);
     }
 
-    pub fn proxy(&self, input: &str) -> ProxyPath {
+    pub fn proxy(&self, input: &str) -> DirectPath {
         for rule in &self.rules {
             let result = rule.replace(input);
             if let Some(result) = result {
-                return ProxyPath::Proxy(result, self.auth.clone());
+                return DirectPath::Proxy(result, self.auth.clone());
             }
         }
-        ProxyPath::Origin(input.to_string())
+        DirectPath::Origin(input.to_string())
+    }
+    pub fn make_example() -> Self {
+        todo!()
     }
 }
 
