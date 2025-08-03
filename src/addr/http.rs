@@ -1,7 +1,7 @@
 use crate::{
     addr::{
         proxy::create_http_client,
-        redirect::{DirectPath, serv::Serv},
+        redirect::{DirectPath, serv::DirectServ},
     },
     predule::*,
     types::RemoteUpdate,
@@ -30,7 +30,7 @@ pub struct HttpAddr {
     password: Option<String>,
     #[getset(set_with = "pub")]
     #[serde(skip)]
-    redirect: Option<Serv>,
+    redirect: Option<DirectServ>,
 }
 
 impl PartialEq for HttpAddr {
@@ -314,7 +314,7 @@ mod tests {
         if test_file.exists() {
             std::fs::remove_file(&test_file).owe_res()?;
         }
-        let redirect = Serv::from_rule(
+        let redirect = DirectServ::from_rule(
             Rule::new(server.url("/unkonw*"), server.url("/success")),
             Some(Auth::new(
                 "generic-1747535977632",

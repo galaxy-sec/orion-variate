@@ -1,4 +1,4 @@
-use crate::addr::redirect::serv::Serv;
+use crate::addr::redirect::serv::DirectServ;
 use crate::addr::redirect::{Auth, DirectPath};
 use crate::types::RemoteUpdate;
 use crate::vars::EnvEvalable;
@@ -79,7 +79,7 @@ pub struct GitAddr {
     username: Option<String>,
     #[getset(set_with = "pub")]
     #[serde(skip)]
-    redirect: Option<Serv>,
+    redirect: Option<DirectServ>,
     #[getset(set_with = "pub")]
     #[serde(skip)]
     proxy: Option<ProxyConfig>,
@@ -999,10 +999,10 @@ mod tests {
             std::fs::remove_dir_all(&dest_path).assert();
         }
         std::fs::create_dir_all(&dest_path).assert();
-        let redirect = Serv::from_rule(
+        let redirect = DirectServ::from_rule(
             Rule::new(
                 "https://github.com/galaxy-sec/hello-none*",
-                "https://github.com/galaxy-sec/hello-word*",
+                "https://github.com/galaxy-sec/hello-word",
             ),
             Some(Auth::new(
                 "generic-1747535977632",

@@ -17,14 +17,14 @@ use serde_derive::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize, Getters)]
 #[getset(get = "pub")]
-pub struct Serv {
+pub struct DirectServ {
     units: Vec<Unit>,
     enable: bool,
 }
 
-pub type ServHandle = Rc<Serv>;
+pub type ServHandle = Rc<DirectServ>;
 
-impl Serv {
+impl DirectServ {
     pub fn new(units: Vec<Unit>, enable: bool) -> Self {
         Self { units, enable }
     }
@@ -43,11 +43,11 @@ impl Serv {
         Self::new(vec![unit], true)
     }
 }
-impl TryFrom<&PathBuf> for Serv {
+impl TryFrom<&PathBuf> for DirectServ {
     type Error = AddrError;
 
     fn try_from(value: &PathBuf) -> Result<Self, Self::Error> {
-        Ok(Serv::from_yml(value).owe_res().with(value)?)
+        Ok(DirectServ::from_yml(value).owe_res().with(value)?)
     }
 }
 
@@ -58,9 +58,9 @@ mod tests {
 
     #[test]
     fn test_serv_serialization_basic() {
-        let serv = Serv::new(vec![], false);
+        let serv = DirectServ::new(vec![], false);
         let serialized = serde_yaml::to_string(&serv).unwrap();
-        let deserialized: Serv = serde_yaml::from_str(&serialized).unwrap();
+        let deserialized: DirectServ = serde_yaml::from_str(&serialized).unwrap();
 
         assert_eq!(deserialized.units().len(), 0);
         assert!(!deserialized.enable());
@@ -74,10 +74,10 @@ mod tests {
             Rule::new("https://gitlab.com/*", "https://mirror.gitlab.com/"),
         ];
         let unit = Unit::new(rules, auth);
-        let serv = Serv::new(vec![unit], true);
+        let serv = DirectServ::new(vec![unit], true);
 
         let serialized = serde_json::to_string(&serv).unwrap();
-        let deserialized: Serv = serde_json::from_str(&serialized).unwrap();
+        let deserialized: DirectServ = serde_json::from_str(&serialized).unwrap();
 
         assert_eq!(deserialized.units().len(), 1);
         assert!(deserialized.enable());
@@ -87,7 +87,6 @@ mod tests {
 
     #[test]
     fn test_serv_serialization_yaml_format() {
-        let rules = vec![Rule::new("https://example.com/*", "https://proxy.com/")];
 
         let yaml_content = r#"
 units:
@@ -97,7 +96,7 @@ units:
 enable: true
 "#;
 
-        let deserialized: Serv = serde_yaml::from_str(yaml_content).unwrap();
+        let deserialized: DirectServ = serde_yaml::from_str(yaml_content).unwrap();
         assert!(deserialized.enable());
         assert_eq!(deserialized.units().len(), 1);
         assert_eq!(
@@ -110,10 +109,10 @@ enable: true
     fn test_serv_from_rule_serialization() {
         let rule = Rule::new("https://test.com/*", "https://redirect.com/");
         let auth = Some(Auth::new("admin", "secret"));
-        let serv = Serv::from_rule(rule, auth);
+        let serv = DirectServ::from_rule(rule, auth);
 
         let serialized = serde_json::to_string_pretty(&serv).unwrap();
-        let deserialized: Serv = serde_json::from_str(&serialized).unwrap();
+        let deserialized: DirectServ = serde_json::from_str(&serialized).unwrap();
 
         assert!(deserialized.enable());
         assert_eq!(deserialized.units().len(), 1);
@@ -141,10 +140,10 @@ enable: true
             Some(Auth::new("user3", "pass3")),
         );
 
-        let serv = Serv::new(vec![unit1, unit2, unit3], true);
+        let serv = DirectServ::new(vec![unit1, unit2, unit3], true);
 
         let serialized = serde_yaml::to_string(&serv).unwrap();
-        let deserialized: Serv = serde_yaml::from_str(&serialized).unwrap();
+        let deserialized: DirectServ = serde_yaml::from_str(&serialized).unwrap();
 
         assert_eq!(deserialized.units().len(), 3);
         assert!(deserialized.enable());
@@ -170,7 +169,7 @@ units:
 enable: true
 "#;
 
-        let deserialized: Serv = serde_yaml::from_str(yaml_content).unwrap();
+        let deserialized: DirectServ = serde_yaml::from_str(yaml_content).unwrap();
 
         assert_eq!(deserialized.units().len(), 2);
         assert!(deserialized.enable());
@@ -194,7 +193,7 @@ units: []
 enable: false
 "#;
 
-        let deserialized: Serv = serde_yaml::from_str(yaml_content).unwrap();
+        let deserialized: DirectServ = serde_yaml::from_str(yaml_content).unwrap();
 
         assert_eq!(deserialized.units().len(), 0);
         assert!(!deserialized.enable());
@@ -222,7 +221,7 @@ enable: false
 }
 "#;
 
-        let deserialized: Serv = serde_json::from_str(json_content).unwrap();
+        let deserialized: DirectServ = serde_json::from_str(json_content).unwrap();
 
         assert_eq!(deserialized.units().len(), 1);
         assert!(deserialized.enable());
@@ -236,7 +235,7 @@ enable: false
     fn test_serv_redirect_functionality() {
         let rules = vec![Rule::new("https://github.com/*", "https://mirror.com/")];
         let unit = Unit::new(rules, None);
-        let serv = Serv::new(vec![unit], true);
+        let serv = DirectServ::new(vec![unit], true);
 
         let result = serv.redirect("https://github.com/user/repo");
         match result {
@@ -251,7 +250,7 @@ enable: false
     fn test_serv_no_redirect_match() {
         let rules = vec![Rule::new("https://github.com/*", "https://mirror.com/")];
         let unit = Unit::new(rules, None);
-        let serv = Serv::new(vec![unit], true);
+        let serv = DirectServ::new(vec![unit], true);
 
         let result = serv.redirect("https://gitlab.com/user/repo");
         match result {
@@ -272,13 +271,13 @@ enable: false
             "https://file-proxy.com/",
         )];
         let unit = Unit::new(rules, Some(Auth::new("file_user", "file_pass")));
-        let original_serv = Serv::new(vec![unit], true);
+        let original_serv = DirectServ::new(vec![unit], true);
 
         // 写入文件
         original_serv.save_yml(&file_path).unwrap();
 
         // 从文件读取
-        let loaded_serv = Serv::try_from(&file_path).unwrap();
+        let loaded_serv = DirectServ::try_from(&file_path).unwrap();
 
         assert_eq!(loaded_serv.units().len(), original_serv.units().len());
         assert_eq!(loaded_serv.enable(), original_serv.enable());
