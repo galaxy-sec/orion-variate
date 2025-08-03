@@ -9,15 +9,15 @@
 // cargo test --test proxy_integration_test
 
 use orion_variate::addr::accessor::GitAccessor;
-use orion_variate::addr::{AddrType, GitAddr};
-use orion_variate::types::LocalUpdate;
+use orion_variate::addr::{Address, GitRepository};
+use orion_variate::types::ResourceDownloader;
 use orion_variate::update::UpdateOptions;
 
 #[test]
 fn test_git_proxy() {
     // 示例1：基本代理配置
     println!("=== 示例1: 基本代理配置 ===");
-    let _git_addr = GitAddr::from("https://github.com/example/repo.git");
+    let _git_addr = GitRepository::from("https://github.com/example/repo.git");
     let accessor = GitAccessor::default().with_proxy_from_env();
     match accessor.proxy() {
         Some(proxy) => {
@@ -36,7 +36,7 @@ fn test_git_proxy() {
 
     // 使用公共测试仓库
     let test_repo = "https://github.com/galaxy-sec/hello-word.git";
-    let git_addr = GitAddr::from(test_repo);
+    let git_addr = GitRepository::from(test_repo);
 
     println!("测试仓库: {test_repo}");
 
@@ -50,8 +50,8 @@ fn test_git_proxy() {
             let rt = tokio::runtime::Runtime::new().unwrap();
             let clone_result = rt.block_on(async {
                 accessor
-                    .update_local(
-                        &AddrType::from(git_addr),
+                    .download_to_local(
+                        &Address::from(git_addr),
                         &temp_dir,
                         &UpdateOptions::default(),
                     )

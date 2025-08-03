@@ -1,7 +1,7 @@
 use crate::{
     addr::{
-        GitAddr, HttpAddr,
-        redirect::{auth::Auth, rule::Rule},
+        GitRepository, HttpResource,
+        redirect::{auth::AuthConfig, rule::Rule},
     },
     opt::OptionFrom,
 };
@@ -15,31 +15,31 @@ use serde_derive::{Deserialize, Serialize};
 pub struct Unit {
     rules: Vec<Rule>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    auth: Option<Auth>,
+    auth: Option<AuthConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, From)]
-pub enum DirectPath {
+pub enum RedirectResult {
     Origin(String),
-    Direct(String, Option<Auth>),
+    Direct(String, Option<AuthConfig>),
 }
-impl DirectPath {
+impl RedirectResult {
     pub fn path(&self) -> &str {
         match self {
-            DirectPath::Origin(path) => path,
-            DirectPath::Direct(path, _) => path,
+            RedirectResult::Origin(path) => path,
+            RedirectResult::Direct(path, _) => path,
         }
     }
     pub fn is_proxy(&self) -> bool {
         match self {
-            DirectPath::Origin(_) => false,
-            DirectPath::Direct(_, _) => true,
+            RedirectResult::Origin(_) => false,
+            RedirectResult::Direct(_, _) => true,
         }
     }
 }
 
 impl Unit {
-    pub fn new(rules: Vec<Rule>, auth: Option<Auth>) -> Self {
+    pub fn new(rules: Vec<Rule>, auth: Option<AuthConfig>) -> Self {
         Self { rules, auth }
     }
 
@@ -47,20 +47,20 @@ impl Unit {
         self.rules.push(rule);
     }
 
-    pub fn set_auth(&mut self, auth: Auth) {
+    pub fn set_auth(&mut self, auth: AuthConfig) {
         self.auth = Some(auth);
     }
 
-    pub fn proxy(&self, input: &str) -> DirectPath {
+    pub fn proxy(&self, input: &str) -> RedirectResult {
         for rule in &self.rules {
             let result = rule.replace(input);
             if let Some(result) = result {
-                return DirectPath::Direct(result, self.auth.clone());
+                return RedirectResult::Direct(result, self.auth.clone());
             }
         }
-        DirectPath::Origin(input.to_string())
+        RedirectResult::Origin(input.to_string())
     }
-    pub fn direct_http_addr(&self, input: &HttpAddr) -> Option<HttpAddr> {
+    pub fn direct_http_addr(&self, input: &HttpResource) -> Option<HttpResource> {
         for rule in &self.rules {
             let result = rule.replace(input.url());
             if let Some(result) = result {
@@ -76,7 +76,7 @@ impl Unit {
         None
     }
     //GitAddr
-    pub fn direct_git_addr(&self, input: &GitAddr) -> Option<GitAddr> {
+    pub fn direct_git_addr(&self, input: &GitRepository) -> Option<GitRepository> {
         for rule in &self.rules {
             let result = rule.replace(input.repo());
             if let Some(result) = result {
@@ -104,7 +104,7 @@ mod tests {
     #[test]
     fn test_unit_new() {
         let rules = vec![Rule::new("https://github.com/*", "https://mirror.com/")];
-        let auth = Some(Auth::new("user".to_string(), "pass".to_string()));
+        let auth = Some(AuthConfig::new("user".to_string(), "pass".to_string()));
         let unit = Unit::new(rules.clone(), auth.clone());
 
         assert_eq!(unit.rules().len(), 1);
@@ -131,7 +131,7 @@ mod tests {
     #[test]
     fn test_unit_set_auth() {
         let mut unit = Unit::new(vec![], None);
-        unit.set_auth(Auth::new("user".to_string(), "pass".to_string()));
+        unit.set_auth(AuthConfig::new("user".to_string(), "pass".to_string()));
 
         assert!(unit.auth().is_some());
     }
@@ -139,7 +139,7 @@ mod tests {
     #[test]
     fn test_unit_serialize_deserialize() {
         let rules = vec![Rule::new("https://github.com/*", "https://mirror.com/")];
-        let auth = Some(Auth::new("user".to_string(), "pass".to_string()));
+        let auth = Some(AuthConfig::new("user".to_string(), "pass".to_string()));
         let unit = Unit::new(rules, auth);
 
         let serialized = serde_json::to_string(&unit).unwrap();

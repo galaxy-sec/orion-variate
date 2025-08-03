@@ -35,7 +35,7 @@ use home::home_dir;
 #[derive(Clone, Debug, Serialize, Deserialize, Default, Getters, Setters, WithSetters)]
 #[getset(get = "pub", set = "pub")]
 #[serde(rename = "git")]
-pub struct GitAddr {
+pub struct GitRepository {
     repo: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     res: Option<String>,
@@ -61,13 +61,13 @@ pub struct GitAddr {
     username: Option<String>,
 }
 
-impl PartialEq for GitAddr {
+impl PartialEq for GitRepository {
     fn eq(&self, other: &Self) -> bool {
         self.repo == other.repo
     }
 }
-impl EnvEvalable<GitAddr> for GitAddr {
-    fn env_eval(self, dict: &EnvDict) -> GitAddr {
+impl EnvEvalable<GitRepository> for GitRepository {
+    fn env_eval(self, dict: &EnvDict) -> GitRepository {
         Self {
             repo: self.repo.env_eval(dict),
             res: self.res.env_eval(dict),
@@ -83,7 +83,7 @@ impl EnvEvalable<GitAddr> for GitAddr {
     }
 }
 
-impl GitAddr {
+impl GitRepository {
     pub fn from<S: Into<String>>(repo: S) -> Self {
         Self {
             repo: repo.into(),

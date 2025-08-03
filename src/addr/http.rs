@@ -8,7 +8,7 @@ use crate::vars::EnvEvalable;
 #[derive(Getters, Clone, Debug, Serialize, Deserialize, WithSetters, Setters)]
 #[getset(get = "pub", set = "pub")]
 #[serde(rename = "http")]
-pub struct HttpAddr {
+pub struct HttpResource {
     url: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     username: Option<String>,
@@ -16,16 +16,16 @@ pub struct HttpAddr {
     password: Option<String>,
 }
 
-impl PartialEq for HttpAddr {
+impl PartialEq for HttpResource {
     fn eq(&self, other: &Self) -> bool {
         self.url == other.url && self.username == other.username && self.password == other.password
     }
 }
 
-impl Eq for HttpAddr {}
+impl Eq for HttpResource {}
 
-impl EnvEvalable<HttpAddr> for HttpAddr {
-    fn env_eval(self, dict: &EnvDict) -> HttpAddr {
+impl EnvEvalable<HttpResource> for HttpResource {
+    fn env_eval(self, dict: &EnvDict) -> HttpResource {
         Self {
             url: self.url.env_eval(dict),
             username: self.username.env_eval(dict),
@@ -34,7 +34,7 @@ impl EnvEvalable<HttpAddr> for HttpAddr {
     }
 }
 
-impl HttpAddr {
+impl HttpResource {
     pub fn from<S: Into<String>>(url: S) -> Self {
         Self {
             url: url.into(),

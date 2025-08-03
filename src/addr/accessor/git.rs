@@ -1,8 +1,8 @@
 use crate::addr::proxy::ProxyConfig;
-use crate::addr::redirect::serv::DirectServ;
-use crate::addr::{AddrReason, AddrResult, AddrType, GitAddr};
-use crate::types::RemoteUpdate;
-use crate::{predule::*, tools::get_repo_name, types::LocalUpdate, update::UpdateOptions};
+use crate::addr::redirect::serv::RedirectService;
+use crate::addr::{AddrReason, AddrResult, Address, GitRepository};
+use crate::types::ResourceDownloader;
+use crate::{predule::*, tools::get_repo_name, types::ResourceDownloader, update::UpdateOptions};
 use async_trait::async_trait;
 use fs_extra::dir::CopyOptions;
 use getset::{Getters, Setters, WithSetters};
@@ -49,7 +49,7 @@ use orion_infra::path::ensure_path;
 #[getset(get = "pub", set = "pub")]
 pub struct GitAccessor {
     #[getset(set_with = "pub")]
-    redirect: Option<DirectServ>,
+    redirect: Option<RedirectService>,
     #[getset(set_with = "pub")]
     proxy: Option<ProxyConfig>,
 }
@@ -62,7 +62,7 @@ impl GitAccessor {
         self
     }
     /// 构建远程回调（包含SSH认证和Token认证）
-    fn build_remote_callbacks(&self, addr: &GitAddr) -> git2::RemoteCallbacks<'_> {
+    fn build_remote_callbacks(&self, addr: &GitRepository) -> git2::RemoteCallbacks<'_> {
         let mut callbacks = git2::RemoteCallbacks::new();
         let ssh_key = addr.ssh_key().clone();
         let ssh_passphrase = addr.ssh_passphrase().clone();
@@ -78,7 +78,7 @@ impl GitAccessor {
                 if allowed_types.contains(git2::CredentialType::USER_PASS_PLAINTEXT) {
                     // 使用已提供的token，如果没有则尝试从.git-credentials读取
                     let final_token = token.clone().or_else(|| {
-                        if let Some(credentials) = GitAddr::read_git_credentials() {
+                        if let Some(credentials) = GitRepository::read_git_credentials() {
                             // 查找匹配的凭证
                             credentials
                                 .iter()
@@ -93,7 +93,7 @@ impl GitAccessor {
                     let final_username = username
                         .clone()
                         .or_else(|| {
-                            if let Some(credentials) = GitAddr::read_git_credentials() {
+                            if let Some(credentials) = GitRepository::read_git_credentials() {
                                 credentials
                                     .iter()
                                     .find(|(cred_url, _, _)| url.contains(cred_url))
@@ -154,7 +154,7 @@ impl GitAccessor {
     }
 
     /// 更新现有仓库
-    fn update_repo(&self, addr: &GitAddr, repo: &Repository) -> Result<(), git2::Error> {
+    fn update_repo(&self, addr: &GitRepository, repo: &Repository) -> Result<(), git2::Error> {
         if !self.is_workdir_clean(repo)? {
             return Err(git2::Error::from_str("工作区有未提交的更改"));
         }
@@ -169,7 +169,7 @@ impl GitAccessor {
     }
 
     /// 执行 pull 操作：合并远程变更
-    fn pull_updates(&self, _addr: &GitAddr, repo: &Repository) -> Result<(), git2::Error> {
+    fn pull_updates(&self, _addr: &GitRepository, repo: &Repository) -> Result<(), git2::Error> {
         // 获取当前分支信息
         let head = repo.head()?;
         let branch_name = match head.shorthand() {
@@ -279,7 +279,7 @@ impl GitAccessor {
         Ok(statuses.is_empty())
     }
 
-    fn get_local_repo_name(&self, addr: &GitAddr) -> String {
+    fn get_local_repo_name(&self, addr: &GitRepository) -> String {
         let mut name = get_repo_name(addr.repo().as_str()).unwrap_or("unknow".into());
         if let Some(postfix) = addr
             .rev()
@@ -294,15 +294,15 @@ impl GitAccessor {
 }
 
 #[async_trait]
-impl LocalUpdate for GitAccessor {
-    async fn update_local(
+impl ResourceDownloader for GitAccessor {
+    async fn download_to_local(
         &self,
-        addr: &AddrType,
+        addr: &Address,
         path: &Path,
         options: &UpdateOptions,
     ) -> AddrResult<UpdateUnit> {
         let addr = match addr {
-            AddrType::Git(x) => x,
+            Address::Git(x) => x,
             _ => return AddrReason::Brief(format!("bad format for git {addr}")).err_result(),
         };
         let name = self.get_local_repo_name(addr);
@@ -377,10 +377,10 @@ impl LocalUpdate for GitAccessor {
 }
 
 #[async_trait]
-impl RemoteUpdate for GitAccessor {
+impl ResourceDownloader for GitAccessor {
     async fn update_remote(
         &self,
-        addr: &AddrType,
+        addr: &Address,
         path: &Path,
         options: &UpdateOptions,
     ) -> AddrResult<UpdateUnit> {
@@ -391,10 +391,10 @@ impl RemoteUpdate for GitAccessor {
         let temp_path = home_dir().unwrap_or(PathBuf::from("~/")).join(".temp");
         ensure_path(&temp_path).owe_logic()?;
 
-        let target_repo = self.update_local(addr, &temp_path, options).await?;
+        let target_repo = self.download_to_local(addr, &temp_path, options).await?;
 
         let addr = match addr {
-            AddrType::Git(x) => x,
+            Address::Git(x) => x,
             _ => return AddrReason::Brief(format!("bad format for git {addr}")).err_result(),
         };
         // 仓库地址
@@ -429,7 +429,7 @@ impl RemoteUpdate for GitAccessor {
 }
 
 impl GitAccessor {
-    pub fn sync_repo(&self, addr: &GitAddr, target_dir: &Path) -> Result<(), git2::Error> {
+    pub fn sync_repo(&self, addr: &GitRepository, target_dir: &Path) -> Result<(), git2::Error> {
         // 尝试打开现有仓库
         match Repository::open(target_dir) {
             Ok(repo) => self.update_repo(addr, &repo),
@@ -438,7 +438,7 @@ impl GitAccessor {
     }
 
     /// 克隆新仓库
-    fn clone_repo(&self, addr: &GitAddr, target_dir: &Path) -> Result<(), git2::Error> {
+    fn clone_repo(&self, addr: &GitRepository, target_dir: &Path) -> Result<(), git2::Error> {
         let repo_addr = if let Some(director) = &self.redirect {
             director.direct_git_addr(addr.clone())
         } else {
@@ -481,7 +481,7 @@ impl GitAccessor {
     }
 
     /// 获取远程更新
-    fn fetch_updates(&self, addr: &GitAddr, repo: &Repository) -> Result<(), git2::Error> {
+    fn fetch_updates(&self, addr: &GitRepository, repo: &Repository) -> Result<(), git2::Error> {
         // 查找 origin 远程
         let mut remote = repo.find_remote("origin")?;
 
@@ -513,7 +513,7 @@ impl GitAccessor {
     }
 
     /// 处理检出目标（按优先级：rev > tag > branch）
-    fn checkout_target(&self, addr: &GitAddr, repo: &Repository) -> Result<(), git2::Error> {
+    fn checkout_target(&self, addr: &GitRepository, repo: &Repository) -> Result<(), git2::Error> {
         if let Some(rev) = addr.rev() {
             self.checkout_revision(addr, repo, rev)
         } else if let Some(tag) = addr.tag() {
@@ -534,7 +534,7 @@ impl GitAccessor {
     /// 检出指定提交
     fn checkout_revision(
         &self,
-        _addr: &GitAddr,
+        _addr: &GitRepository,
         repo: &Repository,
         rev: &str,
     ) -> Result<(), git2::Error> {
@@ -547,7 +547,7 @@ impl GitAccessor {
     /// 检出指定标签
     fn checkout_tag(
         &self,
-        _addr: &GitAddr,
+        _addr: &GitRepository,
         repo: &Repository,
         tag: &str,
     ) -> Result<(), git2::Error> {
@@ -561,7 +561,7 @@ impl GitAccessor {
     /// 检出指定分支（包括远程分支）
     fn checkout_branch(
         &self,
-        _addr: &GitAddr,
+        _addr: &GitRepository,
         repo: &Repository,
         branch: &str,
     ) -> Result<(), git2::Error> {
@@ -596,7 +596,7 @@ impl GitAccessor {
     }
 
     /// 提交
-    fn submit(&self, addr: &GitAddr, repo: &Repository, branch: &str) -> Result<(), git2::Error> {
+    fn submit(&self, addr: &GitRepository, repo: &Repository, branch: &str) -> Result<(), git2::Error> {
         info!("git push origin {}", &branch);
         let branch_path = format!("refs/heads/{branch}",);
         // 拉取远程进行更新
@@ -685,7 +685,7 @@ fn find_default_ssh_key() -> Option<PathBuf> {
 }
 #[cfg(test)]
 mod tests {
-    use crate::addr::redirect::{Auth, Rule};
+    use crate::addr::redirect::{AuthConfig, Rule};
     use crate::{addr::AddrResult, tools::test_init};
 
     use super::*;
@@ -704,13 +704,13 @@ mod tests {
 
         // 使用一个小型测试仓库（这里使用 GitHub 上的一个测试仓库）
         let git_addr =
-            GitAddr::from("https://github.com/galaxy-sec/hello-word.git").with_branch("master"); // 替换为实际测试分支
+            GitRepository::from("https://github.com/galaxy-sec/hello-word.git").with_branch("master"); // 替换为实际测试分支
 
         let accessor = GitAccessor::default();
         // 执行克隆
         let cloned_v = accessor
-            .update_local(
-                &AddrType::from(git_addr),
+            .download_to_local(
+                &Address::from(git_addr),
                 &dest_path,
                 &UpdateOptions::default(),
             )
@@ -739,15 +739,15 @@ mod tests {
         }
         std::fs::create_dir_all(&dest_path).assert();
 
-        let git_addr = GitAddr::from("https://github.com/galaxy-sec/hello-word.git")
+        let git_addr = GitRepository::from("https://github.com/galaxy-sec/hello-word.git")
             .with_branch("main")
             .with_path("x86"); // 或使用 .tag("v1.0") 测试标签
 
         // 执行克隆
-        let addr_type = AddrType::Git(git_addr.clone());
+        let addr_type = Address::Git(git_addr.clone());
         let accessor = GitAccessor::default();
         let git_up = accessor
-            .update_local(&addr_type, &dest_path, &UpdateOptions::default())
+            .download_to_local(&addr_type, &dest_path, &UpdateOptions::default())
             .await
             .assert();
         assert_eq!(git_up.position(), &dest_path.join("x86"));
@@ -765,12 +765,12 @@ mod tests {
         std::fs::create_dir_all(&dest_path).assert();
 
         let git_addr =
-            GitAddr::from("https://github.com/galaxy-sec/hello-word.git").with_branch("main");
+            GitRepository::from("https://github.com/galaxy-sec/hello-word.git").with_branch("main");
         // 执行克隆
         let accessor = GitAccessor::default();
         let git_up = accessor
-            .update_local(
-                &AddrType::from(git_addr),
+            .download_to_local(
+                &Address::from(git_addr),
                 &dest_path,
                 &UpdateOptions::default(),
             )
@@ -789,25 +789,25 @@ mod tests {
             std::fs::remove_dir_all(&dest_path).assert();
         }
         std::fs::create_dir_all(&dest_path).assert();
-        let redirect = DirectServ::from_rule(
+        let redirect = RedirectService::from_rule(
             Rule::new(
                 "https://github.com/galaxy-sec/hello-none*",
                 "https://github.com/galaxy-sec/hello-word",
             ),
-            Some(Auth::new(
+            Some(AuthConfig::new(
                 "generic-1747535977632",
                 "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
             )),
         );
 
         let git_addr =
-            GitAddr::from("https://github.com/galaxy-sec/hello-none.git").with_branch("main");
+            GitRepository::from("https://github.com/galaxy-sec/hello-none.git").with_branch("main");
         let accessor = GitAccessor::default().with_redirect(Some(redirect));
         // 执行克隆
         //   let accessor = GitAccessor::default();
         let git_up = accessor
-            .update_local(
-                &AddrType::from(git_addr),
+            .download_to_local(
+                &Address::from(git_addr),
                 &dest_path,
                 &UpdateOptions::default(),
             )
@@ -827,12 +827,12 @@ mod tests {
 
         // 测试切换到非默认分支
         let git_addr =
-            GitAddr::from("https://github.com/galaxy-sec/hello-word.git").with_branch("develop"); // 替换为实际测试分支
+            GitRepository::from("https://github.com/galaxy-sec/hello-word.git").with_branch("develop"); // 替换为实际测试分支
 
-        let addr_type = AddrType::Git(git_addr.clone());
+        let addr_type = Address::Git(git_addr.clone());
         let accessor = GitAccessor::default();
         let git_up = accessor
-            .update_local(&addr_type, &dest_path, &UpdateOptions::default())
+            .download_to_local(&addr_type, &dest_path, &UpdateOptions::default())
             .await?;
         let repo = git2::Repository::open(git_up.position().clone()).assert();
         let head = repo.head().assert();
@@ -840,8 +840,8 @@ mod tests {
         Ok(())
     }
 
-    use crate::types::RemoteUpdate;
-    use crate::{addr::GitAddr, update::UpdateOptions};
+    use crate::types::ResourceDownloader;
+    use crate::{addr::GitRepository, update::UpdateOptions};
 
     #[ignore = "no run in ci"]
     #[tokio::test]
@@ -852,9 +852,9 @@ mod tests {
         std::fs::create_dir_all(&dir).assert();
         std::fs::write(&file, "spec upload local dir to git repo.").assert();
 
-        let git_addr = GitAddr::from("git@github.com:galaxy-sec/spec_test.git").with_branch("main");
+        let git_addr = GitRepository::from("git@github.com:galaxy-sec/spec_test.git").with_branch("main");
 
-        let addr_type = AddrType::Git(git_addr.clone());
+        let addr_type = Address::Git(git_addr.clone());
         let accessor = GitAccessor::default();
         let git_up = accessor
             .update_remote(&addr_type, &dir, &UpdateOptions::default())
@@ -871,9 +871,9 @@ mod tests {
 
         std::fs::write(&file, "spec upload local file to git repo.").assert();
 
-        let git_addr = GitAddr::from("git@github.com:galaxy-sec/spec_test.git").with_branch("main");
+        let git_addr = GitRepository::from("git@github.com:galaxy-sec/spec_test.git").with_branch("main");
 
-        let addr_type = AddrType::Git(git_addr.clone());
+        let addr_type = Address::Git(git_addr.clone());
         let accessor = GitAccessor::default();
         let git_up = accessor
             .update_remote(&addr_type, &file, &UpdateOptions::default())
@@ -885,7 +885,7 @@ mod tests {
     #[test]
     fn test_git_addr_env_token() {
         // 测试环境变量方法（不实际设置环境变量，仅验证方法存在）
-        let addr = GitAddr::from("https://github.com/user/repo.git");
+        let addr = GitRepository::from("https://github.com/user/repo.git");
 
         // 验证方法可以调用（实际效果取决于环境变量是否存在）
         let addr = addr.with_env_token("NON_EXISTENT_VAR");
@@ -896,14 +896,14 @@ mod tests {
     fn test_git_credentials_parsing() {
         // 测试.git-credentials文件解析功能
         // 由于环境变量限制，我们简化测试，只验证方法存在和基本功能
-        let _result = GitAddr::read_git_credentials();
+        let _result = GitRepository::read_git_credentials();
         // 无论是否存在.git-credentials文件，方法都应该成功返回
     }
 
     #[test]
     fn test_git_addr_with_git_credentials() {
         // 测试GitAddr的with_git_credentials方法
-        let addr = GitAddr::from("https://github.com/user/repo.git");
+        let addr = GitRepository::from("https://github.com/user/repo.git");
 
         // 验证方法可以调用（实际效果取决于.git-credentials文件是否存在）
         let _addr = addr.with_git_credentials();
@@ -922,13 +922,13 @@ mod tests {
         std::fs::create_dir_all(&dest_path).unwrap();
 
         // 测试cnb.cool仓库克隆
-        let git_addr = GitAddr::from("https://cnb.cool/dy-sec/ops/sys-operators/mac-devkit.git")
+        let git_addr = GitRepository::from("https://cnb.cool/dy-sec/ops/sys-operators/mac-devkit.git")
             .with_branch("main");
 
         // 执行克隆
-        let addr_type = AddrType::Git(git_addr.clone());
+        let addr_type = Address::Git(git_addr.clone());
         let git_up = GitAccessor::default()
-            .update_local(&addr_type, &dest_path, &UpdateOptions::default())
+            .download_to_local(&addr_type, &dest_path, &UpdateOptions::default())
             .await?;
 
         // 验证克隆结果
@@ -956,14 +956,14 @@ mod tests {
 
         // 测试cnb.cool仓库克隆（带token认证）
         let git_addr =
-            GitAddr::from("https://cnb.cool/dy-sec/ops/mechanism/gxl-dayu.git").with_branch("main");
+            GitRepository::from("https://cnb.cool/dy-sec/ops/mechanism/gxl-dayu.git").with_branch("main");
         //.with_token("5WXpns1c2bISgpoPA8EdhtIOarC"); // 需要替换为实际token
         //.with_token("your-cnb-token"); // 需要替换为实际token
 
         // 执行克隆
         let git_up = GitAccessor::default()
-            .update_local(
-                &AddrType::from(git_addr),
+            .download_to_local(
+                &Address::from(git_addr),
                 &dest_path,
                 &UpdateOptions::default(),
             )

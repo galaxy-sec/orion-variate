@@ -2,12 +2,12 @@ use getset::Getters;
 use serde_derive::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, Getters, PartialEq)]
 #[getset(get = "pub")]
-pub struct Auth {
+pub struct AuthConfig {
     username: String,
     password: String,
 }
 
-impl Auth {
+impl AuthConfig {
     pub fn new<S: Into<String>>(username: S, password: S) -> Self {
         Self {
             username: username.into(),

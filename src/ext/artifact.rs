@@ -1,8 +1,8 @@
 use crate::addr::AddrResult;
-use crate::addr::AddrType;
+use crate::addr::Address;
 use crate::addr::accessor::AddrAccessor;
 use crate::predule::*;
-use crate::types::LocalUpdate;
+use crate::types::ResourceDownloader;
 use crate::update::UpdateOptions;
 use getset::Getters;
 use getset::Setters;
@@ -17,10 +17,10 @@ pub struct Artifact {
     name: String,
     version: String,
     #[serde(alias = "addr")]
-    origin_addr: AddrType,
+    origin_addr: Address,
     #[getset(set_with = "pub", set = "pub")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    cache_addr: Option<AddrType>,
+    cache_addr: Option<Address>,
     #[getset(set_with = "pub", set = "pub")]
     #[serde(default = "default_cache_enable")]
     cache_enable: bool,
@@ -31,7 +31,7 @@ fn default_cache_enable() -> bool {
 }
 
 impl Artifact {
-    pub fn new<S: Into<String>, A: Into<AddrType>>(name: S, version: S, addr: A, local: S) -> Self {
+    pub fn new<S: Into<String>, A: Into<Address>>(name: S, version: S, addr: A, local: S) -> Self {
         Self {
             name: name.into(),
             version: version.into(),
@@ -51,7 +51,7 @@ impl Artifact {
     ) -> AddrResult<UpdateUnit> {
         std::fs::create_dir_all(dest_path).owe_res()?;
         let result = accessor
-            .update_local_rename(self.origin_addr(), dest_path, &self.name, options)
+            .download_rename(self.origin_addr(), dest_path, &self.name, options)
             .await?;
         Ok(result)
     }
@@ -60,13 +60,13 @@ impl Artifact {
 #[derive(Getters, Clone, Debug, Deserialize, Serialize)]
 pub struct DockImage {
     cep: String,
-    addr: AddrType,
+    addr: Address,
 }
 
 #[derive(Getters, Clone, Debug, Deserialize, Serialize)]
 pub struct BinPackage {
     cep: String,
-    addr: AddrType,
+    addr: Address,
 }
 
 #[cfg(test)]
@@ -74,7 +74,7 @@ mod tests {
 
     use home::home_dir;
 
-    use crate::addr::{GitAddr, HttpAddr, accessor::GitAccessor};
+    use crate::addr::{GitRepository, HttpResource, accessor::GitAccessor};
 
     use super::*;
 
@@ -84,7 +84,7 @@ mod tests {
         let artifact = Artifact::new(
             "hello-word",
             "0.1.0",
-            HttpAddr::from("https://github.com/galaxy-sec/hello-word.git"),
+            HttpResource::from("https://github.com/galaxy-sec/hello-word.git"),
             "hello-word",
         );
         let path = home_dir()
@@ -103,11 +103,11 @@ mod tests {
     #[ignore = "not run in ci"]
     #[tokio::test]
     async fn test_http_artifact_v2() -> AddrResult<()> {
-        let cache_addr = AddrType::Http(HttpAddr::from(
+        let cache_addr = Address::Http(HttpResource::from(
             "https://dy-sec-generic.pkg.coding.net/galaxy-open/generic/galaxy-init.sh?version=latest",
         ));
-        let deploy_type = AddrType::Git(
-            GitAddr::from("git@github.com:galaxy-sec/spec_test.git").with_branch("main"),
+        let deploy_type = Address::Git(
+            GitRepository::from("git@github.com:galaxy-sec/spec_test.git").with_branch("main"),
         );
         let _artifact = Artifact {
             name: "galaxy-init".to_string(),

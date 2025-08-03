@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use derive_more::From;
 
-use crate::addr::{AddrResult, AddrType};
-use crate::types::{LocalUpdate, RemoteUpdate, UpdateUnit};
+use crate::addr::{AddrResult, Address};
+use crate::types::{ResourceDownloader, ResourceDownloader, UpdateUnit};
 use crate::update::UpdateOptions;
 use std::path::Path;
 
@@ -22,26 +22,26 @@ pub enum AddrAccessor {
 }
 
 #[async_trait]
-impl LocalUpdate for AddrAccessor {
-    async fn update_local(
+impl ResourceDownloader for AddrAccessor {
+    async fn download_to_local(
         &self,
-        addr: &AddrType,
+        addr: &Address,
         path: &Path,
         up_options: &UpdateOptions,
     ) -> AddrResult<UpdateUnit> {
         match self {
-            AddrAccessor::Git(o) => o.update_local(addr, path, up_options).await,
-            AddrAccessor::Http(o) => o.update_local(addr, path, up_options).await,
-            AddrAccessor::Local(o) => o.update_local(addr, path, up_options).await,
+            AddrAccessor::Git(o) => o.download_to_local(addr, path, up_options).await,
+            AddrAccessor::Http(o) => o.download_to_local(addr, path, up_options).await,
+            AddrAccessor::Local(o) => o.download_to_local(addr, path, up_options).await,
         }
     }
 }
 
 #[async_trait]
-impl RemoteUpdate for AddrAccessor {
+impl ResourceDownloader for AddrAccessor {
     async fn update_remote(
         &self,
-        addr: &AddrType,
+        addr: &Address,
         path: &Path,
         options: &UpdateOptions,
     ) -> AddrResult<UpdateUnit> {

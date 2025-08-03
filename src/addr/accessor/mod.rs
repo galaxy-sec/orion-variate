@@ -1,6 +1,6 @@
 mod core;
 mod git;
-mod http;
+pub mod http;
 mod local;
 pub use core::AddrAccessor;
 pub use git::GitAccessor;

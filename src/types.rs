@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use async_trait::async_trait;
 
 use crate::{
-    addr::{AddrResult, AddrType, accessor::rename_path},
+    addr::{AddrResult, Address, accessor::rename_path},
     update::UpdateOptions,
     vars::VarCollection,
 };
@@ -36,30 +36,30 @@ impl From<PathBuf> for UpdateUnit {
 }
 
 #[async_trait]
-pub trait RemoteUpdate {
-    async fn update_remote(
+pub trait ResourceUploader {
+    async fn upload_from_local(
         &self,
-        addr: &AddrType,
-        path: &Path,
+        source: &Address,
+        dest: &Path,
         options: &UpdateOptions,
     ) -> AddrResult<UpdateUnit>;
 }
 #[async_trait]
-pub trait LocalUpdate {
-    async fn update_local(
+pub trait ResourceDownloader {
+    async fn download_to_local(
         &self,
-        addr: &AddrType,
-        path: &Path,
+        source: &Address,
+        dest: &Path,
         options: &UpdateOptions,
     ) -> AddrResult<UpdateUnit>;
-    async fn update_local_rename(
+    async fn download_rename(
         &self,
-        addr: &AddrType,
+        addr: &Address,
         path: &Path,
         name: &str,
         options: &UpdateOptions,
     ) -> AddrResult<UpdateUnit> {
-        let mut target = self.update_local(addr, path, options).await?;
+        let mut target = self.download_to_local(addr, path, options).await?;
         let path = rename_path(target.position(), name)?;
         target.set_position(path);
         Ok(target)

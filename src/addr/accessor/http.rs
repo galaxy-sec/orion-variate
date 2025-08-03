@@ -1,10 +1,10 @@
 use crate::{
     addr::{
-        AddrReason, AddrResult, AddrType, HttpAddr, http::filename_of_url,
-        proxy::create_http_client, redirect::serv::DirectServ,
+        AddrReason, AddrResult, Address, HttpResource, http::filename_of_url,
+        proxy::create_http_client, redirect::serv::RedirectService,
     },
     predule::*,
-    types::RemoteUpdate,
+    types::ResourceDownloader,
     update::UpdateOptions,
 };
 
@@ -13,19 +13,19 @@ use orion_error::{ToStructError, UvsResFrom};
 use tokio::io::AsyncWriteExt;
 use tracing::info;
 
-use crate::types::LocalUpdate;
+use crate::types::ResourceDownloader;
 
 #[derive(Getters, Clone, Debug, WithSetters, Default)]
 #[getset(get = "pub")]
 pub struct HttpAccessor {
     #[getset(set_with = "pub")]
-    redirect: Option<DirectServ>,
+    redirect: Option<RedirectService>,
 }
 
 impl HttpAccessor {
     pub async fn upload<P: AsRef<Path>>(
         &self,
-        addr: &HttpAddr,
+        addr: &HttpResource,
         file_path: P,
         method: &str,
     ) -> AddrResult<()> {
@@ -87,7 +87,7 @@ impl HttpAccessor {
 
     pub async fn download(
         &self,
-        addr: &HttpAddr,
+        addr: &HttpResource,
         dest_path: &Path,
         options: &UpdateOptions,
     ) -> AddrResult<PathBuf> {
@@ -153,15 +153,15 @@ impl HttpAccessor {
 }
 
 #[async_trait]
-impl LocalUpdate for HttpAccessor {
-    async fn update_local(
+impl ResourceDownloader for HttpAccessor {
+    async fn download_to_local(
         &self,
-        addr: &AddrType,
+        addr: &Address,
         dest_dir: &Path,
         options: &UpdateOptions,
     ) -> AddrResult<UpdateUnit> {
         match addr {
-            AddrType::Http(http) => {
+            Address::Http(http) => {
                 let file = filename_of_url(http.url());
                 let dest_path = dest_dir.join(file.unwrap_or("file.tmp".into()));
                 Ok(UpdateUnit::from(
@@ -174,10 +174,10 @@ impl LocalUpdate for HttpAccessor {
 }
 
 #[async_trait]
-impl RemoteUpdate for HttpAccessor {
+impl ResourceDownloader for HttpAccessor {
     async fn update_remote(
         &self,
-        addr: &AddrType,
+        addr: &Address,
         path: &Path,
         _: &UpdateOptions,
     ) -> AddrResult<UpdateUnit> {
@@ -185,7 +185,7 @@ impl RemoteUpdate for HttpAccessor {
             return Err(StructError::from_res("path not exist".into()));
         }
         match addr {
-            AddrType::Http(http) => {
+            Address::Http(http) => {
                 self.upload(http, path, "POST").await?;
                 if path.is_file() {
                     std::fs::remove_file(path).owe_res()?;
@@ -204,7 +204,7 @@ mod tests {
     use crate::{
         addr::{
             AddrResult,
-            redirect::{Auth, Rule},
+            redirect::{AuthConfig, Rule},
         },
         tools::test_init,
         update::UpdateOptions,
@@ -234,15 +234,15 @@ mod tests {
         if test_file.exists() {
             std::fs::remove_file(&test_file).owe_res()?;
         }
-        let http_addr = HttpAddr::from(server.url("/wpflow.txt")).with_credentials(
+        let http_addr = HttpResource::from(server.url("/wpflow.txt")).with_credentials(
             "generic-1747535977632",
             "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
         );
 
         let http_accessor = HttpAccessor::default();
         http_accessor
-            .update_local(
-                &AddrType::from(http_addr),
+            .download_to_local(
+                &Address::from(http_addr),
                 &temp_dir,
                 &UpdateOptions::for_test(),
             )
@@ -274,19 +274,19 @@ mod tests {
         if test_file.exists() {
             std::fs::remove_file(&test_file).owe_res()?;
         }
-        let redirect = DirectServ::from_rule(
+        let redirect = RedirectService::from_rule(
             Rule::new(server.url("/unkonw*"), server.url("/success")),
-            Some(Auth::new(
+            Some(AuthConfig::new(
                 "generic-1747535977632",
                 "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
             )),
         );
-        let http_addr = HttpAddr::from(server.url("/unkonw.txt"));
+        let http_addr = HttpResource::from(server.url("/unkonw.txt"));
 
         let http_accessor = HttpAccessor::default().with_redirect(Some(redirect));
         http_accessor
-            .update_local(
-                &AddrType::from(http_addr),
+            .download_to_local(
+                &Address::from(http_addr),
                 &temp_dir,
                 &UpdateOptions::for_test(),
             )
@@ -301,7 +301,7 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn test_http_addr() -> AddrResult<()> {
         let path = PathBuf::from("/tmp");
-        let addr = HttpAddr::from(
+        let addr = HttpResource::from(
             "https://dy-sec-generic.pkg.coding.net/sec-hub/generic/warp-flow/wpflow?version=1.0.89-alpha",
         )
         .with_credentials(
@@ -310,7 +310,7 @@ mod tests {
                 );
         let http_accessor = HttpAccessor::default();
         http_accessor
-            .update_local(&AddrType::from(addr), &path, &UpdateOptions::for_test())
+            .download_to_local(&Address::from(addr), &path, &UpdateOptions::for_test())
             .await?;
         Ok(())
     }
@@ -336,7 +336,7 @@ mod tests {
             .owe_sys()?;
 
         // 3. 执行上传
-        let http_addr = HttpAddr::from(server.url("/upload")).with_credentials(
+        let http_addr = HttpResource::from(server.url("/upload")).with_credentials(
             "generic-1747535977632",
             "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
         );
@@ -368,7 +368,7 @@ mod tests {
             .owe_sys()?;
 
         // 3. 执行上传
-        let http_addr = HttpAddr::from(server.url("/upload_put")).with_credentials(
+        let http_addr = HttpResource::from(server.url("/upload_put")).with_credentials(
             "generic-1747535977632",
             "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
         );
@@ -408,7 +408,7 @@ mod test3 {
             .owe_sys()?;
 
         // 3. 执行上传
-        let http_addr = HttpAddr::from(server.url("/upload")).with_credentials(
+        let http_addr = HttpResource::from(server.url("/upload")).with_credentials(
             "generic-1747535977632",
             "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
         );
@@ -416,7 +416,7 @@ mod test3 {
 
         http_accessor
             .update_remote(
-                &AddrType::from(http_addr),
+                &Address::from(http_addr),
                 &file_path,
                 &UpdateOptions::for_test(),
             )

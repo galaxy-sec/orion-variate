@@ -1,27 +1,27 @@
-use crate::addr::{AddrReason, AddrResult, AddrType};
+use crate::addr::{AddrReason, AddrResult, Address};
 use crate::update::UpdateOptions;
-use crate::{predule::*, types::RemoteUpdate};
+use crate::{predule::*, types::ResourceDownloader};
 use contracts::debug_requires;
 use fs_extra::dir::CopyOptions;
 use orion_error::{ToStructError, UvsResFrom};
 use orion_infra::auto_exit_log;
 
-use crate::types::LocalUpdate;
+use crate::types::ResourceDownloader;
 
 #[derive(Getters, Clone, Debug, Default)]
 pub struct LocalAccessor {}
 
 #[async_trait]
-impl LocalUpdate for LocalAccessor {
+impl ResourceDownloader for LocalAccessor {
     //#[debug_ensures(matches!(*result, Ok(v) if v.exists()), "path not exists")]
-    async fn update_local(
+    async fn download_to_local(
         &self,
-        addr: &AddrType,
+        addr: &Address,
         path: &Path,
         up_options: &UpdateOptions,
     ) -> AddrResult<UpdateUnit> {
         let addr = match addr {
-            AddrType::Local(addr) => addr,
+            Address::Local(addr) => addr,
             _ => return Err(AddrReason::Brief(format!("addr type error {addr}")).to_err()),
         };
         let mut ctx = WithContext::want("update local addr");
@@ -61,28 +61,28 @@ impl LocalUpdate for LocalAccessor {
         Ok(UpdateUnit::from(dst))
     }
 
-    async fn update_local_rename(
+    async fn download_rename(
         &self,
-        addr: &AddrType,
+        addr: &Address,
         path: &Path,
         name: &str,
         options: &UpdateOptions,
     ) -> AddrResult<UpdateUnit> {
-        let target = self.update_local(addr, path, options).await?;
+        let target = self.download_to_local(addr, path, options).await?;
         Ok(UpdateUnit::from(rename_path(target.position(), name)?))
     }
 }
 
 #[async_trait]
-impl RemoteUpdate for LocalAccessor {
+impl ResourceDownloader for LocalAccessor {
     async fn update_remote(
         &self,
-        addr: &AddrType,
+        addr: &Address,
         path: &Path,
         _: &UpdateOptions,
     ) -> AddrResult<UpdateUnit> {
         let addr = match addr {
-            AddrType::Local(addr) => addr,
+            Address::Local(addr) => addr,
             _ => return Err(AddrReason::Brief(format!("addr type error {addr}")).to_err()),
         };
         if !path.exists() {
@@ -151,7 +151,7 @@ pub fn rename_path(local: &Path, name: &str) -> AddrResult<PathBuf> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        addr::{AddrResult, LocalAddr},
+        addr::{AddrResult, LocalPath},
         update::UpdateOptions,
     };
 
@@ -166,13 +166,13 @@ mod tests {
             std::fs::remove_dir_all(&path).owe_conf()?;
         }
         std::fs::create_dir_all(&path).owe_conf()?;
-        let local = LocalAddr::from("./tests/data/sys-1");
-        let addr_type = AddrType::Local(local.clone());
+        let local = LocalPath::from("./tests/data/sys-1");
+        let addr_type = Address::Local(local.clone());
         LocalAccessor::default()
-            .update_local_rename(&addr_type, &path, "sys-2", &UpdateOptions::for_test())
+            .download_rename(&addr_type, &path, "sys-2", &UpdateOptions::for_test())
             .await?;
         LocalAccessor::default()
-            .update_local(&addr_type, &path, &UpdateOptions::for_test())
+            .download_to_local(&addr_type, &path, &UpdateOptions::for_test())
             .await?;
 
         assert!(std::fs::exists(path.join("sys-2")).owe_conf()?);
@@ -272,8 +272,8 @@ mod tests {
 
         let file_path = source_dir.join("file.txt");
         std::fs::write(&file_path, "source").assert();
-        let local_addr = LocalAddr::from(target_dir.to_str().unwrap_or("~/temp"));
-        let addr_type = AddrType::Local(local_addr.clone());
+        let local_addr = LocalPath::from(target_dir.to_str().unwrap_or("~/temp"));
+        let addr_type = Address::Local(local_addr.clone());
 
         LocalAccessor::default()
             .update_remote(&addr_type, file_path.as_path(), &UpdateOptions::for_test())
@@ -298,8 +298,8 @@ mod tests {
 
         std::fs::write(version_2.join("version_2.txt"), "version_2").assert();
 
-        let local_addr = LocalAddr::from(version_1.to_str().unwrap_or("~/temp"));
-        let addr_type = AddrType::Local(local_addr.clone());
+        let local_addr = LocalPath::from(version_1.to_str().unwrap_or("~/temp"));
+        let addr_type = Address::Local(local_addr.clone());
         LocalAccessor::default()
             .update_remote(&addr_type, &version_2, &UpdateOptions::for_test())
             .await?;
