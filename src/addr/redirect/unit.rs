@@ -1,6 +1,13 @@
-use crate::addr::redirect::{auth::Auth, rule::Rule};
+use crate::{
+    addr::{
+        GitAddr, HttpAddr,
+        redirect::{auth::Auth, rule::Rule},
+    },
+    opt::OptionFrom,
+};
 use derive_more::From;
 use getset::Getters;
+use log::info;
 use serde_derive::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Getters)]
@@ -14,19 +21,19 @@ pub struct Unit {
 #[derive(Debug, Clone, Serialize, Deserialize, From)]
 pub enum DirectPath {
     Origin(String),
-    Proxy(String, Option<Auth>),
+    Direct(String, Option<Auth>),
 }
 impl DirectPath {
     pub fn path(&self) -> &str {
         match self {
             DirectPath::Origin(path) => path,
-            DirectPath::Proxy(path, _) => path,
+            DirectPath::Direct(path, _) => path,
         }
     }
     pub fn is_proxy(&self) -> bool {
         match self {
             DirectPath::Origin(_) => false,
-            DirectPath::Proxy(_, _) => true,
+            DirectPath::Direct(_, _) => true,
         }
     }
 }
@@ -48,10 +55,42 @@ impl Unit {
         for rule in &self.rules {
             let result = rule.replace(input);
             if let Some(result) = result {
-                return DirectPath::Proxy(result, self.auth.clone());
+                return DirectPath::Direct(result, self.auth.clone());
             }
         }
         DirectPath::Origin(input.to_string())
+    }
+    pub fn direct_http_addr(&self, input: &HttpAddr) -> Option<HttpAddr> {
+        for rule in &self.rules {
+            let result = rule.replace(input.url());
+            if let Some(result) = result {
+                let mut direct = input.clone();
+                direct.set_url(result);
+                if let Some(auth) = self.auth() {
+                    direct.set_username(auth.username().clone().to_opt());
+                    direct.set_password(auth.password().clone().to_opt());
+                }
+                return Some(direct);
+            }
+        }
+        None
+    }
+    //GitAddr
+    pub fn direct_git_addr(&self, input: &GitAddr) -> Option<GitAddr> {
+        for rule in &self.rules {
+            let result = rule.replace(&input.repo());
+            if let Some(result) = result {
+                info!(target:"git", "redirect to {result}, origin:{}",input.repo() );
+                let mut direct = input.clone();
+                direct.set_repo(result);
+                if let Some(auth) = self.auth() {
+                    direct.set_username(auth.username().clone().to_opt());
+                    direct.set_token(auth.password().clone().to_opt());
+                }
+                return Some(direct);
+            }
+        }
+        None
     }
     pub fn make_example() -> Self {
         todo!()

@@ -51,6 +51,18 @@ mod tests {
         let url = rule.replace("https://github.com/galaxy-sec/galaxy-flow/releases/download/v0.8.5/galaxy-flow-v0.8.5-aarch64-apple-darwin.tar.gz");
         assert_eq!(url,Some("https://gflow.com/releases/download/v0.8.5/galaxy-flow-v0.8.5-aarch64-apple-darwin.tar.gz".to_string()));
     }
+    #[test]
+    fn test_rule2() {
+        let rule = Rule::new(
+            "https://github.com/galaxy-sec/hello-none*",
+            "https://github.com/galaxy-sec/hello-word",
+        );
+        let url = rule.replace("https://github.com/galaxy-sec/hello-none.git");
+        assert_eq!(
+            url,
+            Some("https://github.com/galaxy-sec/hello-word.git".to_string())
+        );
+    }
 
     #[test]
     fn test_rule_no_match() {

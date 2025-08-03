@@ -1,10 +1,9 @@
-use crate::types::RemoteUpdate;
-use crate::{predule::*, update::UpdateOptions, vars::EnvDict};
+use crate::{predule::*, vars::EnvDict};
 use derive_more::{Display, From};
 
-use crate::{types::LocalUpdate, vars::EnvEvalable};
+use crate::vars::EnvEvalable;
 
-use super::{AddrResult, GitAddr, HttpAddr, LocalAddr};
+use super::{GitAddr, HttpAddr, LocalAddr};
 use std::str::FromStr;
 use thiserror::Error;
 
@@ -28,55 +27,6 @@ impl EnvEvalable<AddrType> for AddrType {
             AddrType::Git(v) => AddrType::Git(v.env_eval(dict)),
             AddrType::Http(v) => AddrType::Http(v.env_eval(dict)),
             AddrType::Local(v) => AddrType::Local(v.env_eval(dict)),
-        }
-    }
-}
-
-#[async_trait]
-impl LocalUpdate for AddrType {
-    async fn update_local(
-        &self,
-        addr: &AddrType,
-        path: &Path,
-        options: &UpdateOptions,
-    ) -> AddrResult<UpdateUnit> {
-        let ins = self.clone().env_eval(options.values());
-        match ins {
-            AddrType::Git(addr) => addr.update_local(path, options).await,
-            AddrType::Http(addr) => addr.update_local(path, options).await,
-            AddrType::Local(addr) => addr.update_local(path, options).await,
-        }
-    }
-
-    async fn update_local_rename(
-        &self,
-        addr: &AddrType,
-        path: &Path,
-        name: &str,
-        options: &UpdateOptions,
-    ) -> AddrResult<UpdateUnit> {
-        let ins = self.clone().env_eval(options.values());
-        match ins {
-            AddrType::Git(addr) => addr.update_local_rename(path, name, options).await,
-            AddrType::Http(addr) => addr.update_local_rename(path, name, options).await,
-            AddrType::Local(addr) => addr.update_local_rename(path, name, options).await,
-        }
-    }
-}
-
-#[async_trait]
-impl RemoteUpdate for AddrType {
-    async fn update_remote(
-        &self,
-        addr: &AddrType,
-        path: &Path,
-        options: &UpdateOptions,
-    ) -> AddrResult<UpdateUnit> {
-        let ins = self.clone().env_eval(options.values());
-        match ins {
-            AddrType::Git(addr) => addr.update_remote(path, options).await,
-            AddrType::Http(addr) => addr.update_remote(path, options).await,
-            AddrType::Local(addr) => addr.update_remote(path, options).await,
         }
     }
 }

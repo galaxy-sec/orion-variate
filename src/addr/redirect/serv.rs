@@ -5,7 +5,7 @@ use orion_common::serde::Yamlable;
 use orion_error::{ErrorOwe, ErrorWith};
 
 use crate::addr::{
-    AddrError,
+    AddrError, GitAddr, HttpAddr,
     redirect::{
         auth::Auth,
         unit::{DirectPath, Unit},
@@ -38,6 +38,23 @@ impl DirectServ {
         }
         path
     }
+    pub fn direct_http_addr(&self, origin: HttpAddr) -> HttpAddr {
+        for unit in &self.units {
+            if let Some(dirct) = unit.direct_http_addr(&origin) {
+                return dirct;
+            }
+        }
+        origin
+    }
+    pub fn direct_git_addr(&self, origin: GitAddr) -> GitAddr {
+        for unit in &self.units {
+            if let Some(dirct) = unit.direct_git_addr(&origin) {
+                return dirct;
+            }
+        }
+        origin
+    }
+
     pub fn from_rule(rule: Rule, auth: Option<Auth>) -> Self {
         let unit = Unit::new(vec![rule], auth);
         Self::new(vec![unit], true)
@@ -87,7 +104,6 @@ mod tests {
 
     #[test]
     fn test_serv_serialization_yaml_format() {
-
         let yaml_content = r#"
 units:
   - rules:
@@ -239,7 +255,7 @@ enable: false
 
         let result = serv.redirect("https://github.com/user/repo");
         match result {
-            DirectPath::Proxy(path, _) => {
+            DirectPath::Direct(path, _) => {
                 assert_eq!(path, "https://mirror.com/user/repo");
             }
             DirectPath::Origin(_) => panic!("Expected proxy path"),
@@ -257,7 +273,7 @@ enable: false
             DirectPath::Origin(path) => {
                 assert_eq!(path, "https://gitlab.com/user/repo");
             }
-            DirectPath::Proxy(_, _) => panic!("Expected origin path"),
+            DirectPath::Direct(_, _) => panic!("Expected origin path"),
         }
     }
 

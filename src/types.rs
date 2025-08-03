@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use async_trait::async_trait;
 
 use crate::{
-    addr::{AddrResult, AddrType, rename_path},
+    addr::{AddrResult, AddrType, accessor::rename_path},
     update::UpdateOptions,
     vars::VarCollection,
 };

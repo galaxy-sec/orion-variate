@@ -1,5 +1,6 @@
 use crate::addr::AddrResult;
 use crate::addr::AddrType;
+use crate::addr::accessor::AddrAccessor;
 use crate::predule::*;
 use crate::types::LocalUpdate;
 use crate::update::UpdateOptions;
@@ -9,6 +10,7 @@ use getset::WithSetters;
 use orion_error::ErrorOwe;
 use serde_derive::{Deserialize, Serialize};
 use std::path::Path;
+
 #[derive(Getters, Clone, Debug, Deserialize, Serialize, Setters, WithSetters)]
 #[getset(get = "pub")]
 pub struct Artifact {
@@ -43,13 +45,13 @@ impl Artifact {
     // 直接从远程仓库下载
     pub async fn deploy_repo_to_local(
         &self,
+        accessor: &AddrAccessor,
         dest_path: &Path,
         options: &UpdateOptions,
     ) -> AddrResult<UpdateUnit> {
         std::fs::create_dir_all(dest_path).owe_res()?;
-        let result = self
-            .origin_addr
-            .update_local_rename(dest_path, &self.name, options)
+        let result = accessor
+            .update_local_rename(self.origin_addr(), dest_path, &self.name, options)
             .await?;
         Ok(result)
     }
@@ -72,7 +74,7 @@ mod tests {
 
     use home::home_dir;
 
-    use crate::addr::{GitAddr, HttpAddr};
+    use crate::addr::{GitAddr, HttpAddr, accessor::GitAccessor};
 
     use super::*;
 
@@ -89,8 +91,9 @@ mod tests {
             .unwrap_or("UNKOWN".into())
             .join(".cache")
             .join("v1");
+        let x = GitAccessor::default();
         artifact
-            .deploy_repo_to_local(&path, &UpdateOptions::default())
+            .deploy_repo_to_local(&x.into(), &path, &UpdateOptions::default())
             .await?;
 
         assert!(path.join("hello-word").exists());

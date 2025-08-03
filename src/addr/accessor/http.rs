@@ -1,46 +1,25 @@
 use crate::{
     addr::{
-        AddrReason, AddrResult, AddrType, GitAddr, HttpAddr,
-        proxy::create_http_client,
-        redirect::{DirectPath, serv::DirectServ},
+        AddrReason, AddrResult, AddrType, HttpAddr, http::filename_of_url,
+        proxy::create_http_client, redirect::serv::DirectServ,
     },
     predule::*,
     types::RemoteUpdate,
     update::UpdateOptions,
-    vars::EnvDict,
 };
 
 use getset::{Getters, WithSetters};
 use orion_error::{ToStructError, UvsResFrom};
 use tokio::io::AsyncWriteExt;
 use tracing::info;
-use url::Url;
 
-use crate::{types::LocalUpdate, vars::EnvEvalable};
+use crate::types::LocalUpdate;
 
 #[derive(Getters, Clone, Debug, WithSetters, Default)]
 #[getset(get = "pub")]
 pub struct HttpAccessor {
     #[getset(set_with = "pub")]
     redirect: Option<DirectServ>,
-}
-
-impl HttpAccessor {
-    pub fn get_filename(&self) -> Option<String> {
-        let url_str = self
-            .redirect
-            .as_ref()
-            .map(|x| x.redirect(self.url.as_str()).path().to_string())
-            .unwrap_or(self.url.clone());
-        let url = Url::parse(url_str.as_str()).ok()?;
-        url.path_segments()?.next_back().and_then(|s| {
-            if s.is_empty() {
-                None
-            } else {
-                Some(s.to_string())
-            }
-        })
-    }
 }
 
 impl HttpAccessor {
@@ -52,11 +31,14 @@ impl HttpAccessor {
     ) -> AddrResult<()> {
         use indicatif::{ProgressBar, ProgressStyle};
         let mut ctx = WithContext::want("upload url");
+        let addr = if let Some(direct_serv) = &self.redirect {
+            direct_serv.direct_http_addr(addr.clone())
+        } else {
+            addr.clone()
+        };
 
         let client = create_http_client();
-        let file_name = self
-            .get_filename()
-            .unwrap_or_else(|| "file.bin".to_string());
+        let file_name = filename_of_url(addr.url()).unwrap_or_else(|| "file.bin".to_string());
         ctx.with_path("local file", file_path.as_ref());
 
         println!(
@@ -110,6 +92,11 @@ impl HttpAccessor {
         options: &UpdateOptions,
     ) -> AddrResult<PathBuf> {
         use indicatif::{ProgressBar, ProgressStyle};
+        let addr = if let Some(direct_serv) = &self.redirect {
+            direct_serv.direct_http_addr(addr.clone())
+        } else {
+            addr.clone()
+        };
 
         if dest_path.exists() && options.reuse_cache() {
             info!(target :"spec/addr", "{} exists , ignore!! ",dest_path.display());
@@ -122,31 +109,10 @@ impl HttpAccessor {
         ctx.with("url", addr.url());
         //let client = reqwest::Client::new();
         let client = create_http_client();
-        let request = if let Some(director) = &self.redirect {
-            let proxy_path = director.redirect(addr.url());
-            let mut request = client.get(proxy_path.path());
-            println!("request url:{}", proxy_path.path());
-            match proxy_path {
-                DirectPath::Origin(_) => {
-                    if let (Some(u), Some(p)) = (addr.username(), addr.password()) {
-                        request = request.basic_auth(u, Some(p));
-                    }
-                }
-                DirectPath::Proxy(_, auth_opt) => {
-                    if let Some(auth) = auth_opt {
-                        request = request.basic_auth(auth.username(), Some(auth.password()));
-                    }
-                }
-            }
-            request
-        } else {
-            let mut request = client.get(addr.url());
-            if let (Some(u), Some(p)) = (addr.username(), addr.password()) {
-                request = request.basic_auth(u, Some(p));
-            }
-            request
-        };
-        //let mut request = client.get(&self.url);
+        let mut request = client.get(addr.url());
+        if let (Some(u), Some(p)) = (addr.username(), addr.password()) {
+            request = request.basic_auth(u, Some(p));
+        }
 
         let mut response = request.send().await.owe_res().with(&ctx)?;
 
@@ -194,12 +160,14 @@ impl LocalUpdate for HttpAccessor {
         dest_dir: &Path,
         options: &UpdateOptions,
     ) -> AddrResult<UpdateUnit> {
-        let file = self.get_filename();
-        let dest_path = dest_dir.join(file.unwrap_or("file.tmp".into()));
         match addr {
-            AddrType::Http(http) => Ok(UpdateUnit::from(
-                self.download(http, &dest_path, options).await?,
-            )),
+            AddrType::Http(http) => {
+                let file = filename_of_url(http.url());
+                let dest_path = dest_dir.join(file.unwrap_or("file.tmp".into()));
+                Ok(UpdateUnit::from(
+                    self.download(http, &dest_path, options).await?,
+                ))
+            }
             _ => Err(AddrReason::Brief(format!("addr type error {addr}")).to_err()),
         }
     }
@@ -238,14 +206,17 @@ mod tests {
             AddrResult,
             redirect::{Auth, Rule},
         },
+        tools::test_init,
         update::UpdateOptions,
     };
 
     use super::*;
     use httpmock::{Method::GET, MockServer};
+    use orion_error::TestAssertWithMsg;
+    use orion_infra::path::ensure_path;
 
     #[tokio::test(flavor = "current_thread")]
-    async fn test_http_auth_download() -> AddrResult<()> {
+    async fn test_http_auth_download_no() -> AddrResult<()> {
         // 1. 配置模拟服务器
         let server = MockServer::start();
         let mock = server.mock(|when, then| {
@@ -258,7 +229,7 @@ mod tests {
         });
 
         // 2. 执行下载
-        let temp_dir = PathBuf::from("./test/temp");
+        let temp_dir = PathBuf::from("./tests/temp");
         let test_file = temp_dir.join("wpflow.txt");
         if test_file.exists() {
             std::fs::remove_file(&test_file).owe_res()?;
@@ -285,20 +256,21 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn test_http_auth_download_with_redirect() -> AddrResult<()> {
+        test_init();
         // 1. 配置模拟服务器
         let server = MockServer::start();
         let mock = server.mock(|when, then| {
-            when.method(GET)
-                .path("/success.txt")
+            when.method(GET).path("/success.txt")
                 .header("Authorization", "Basic Z2VuZXJpYy0xNzQ3NTM1OTc3NjMyOjViMmM5ZTliN2YxMTFhZjUyZjAzNzVjMWZkOWQzNWNkNGQwZGFiYzM=");
-    then.status(200)
-        .header("content-type", "text/html; charset=UTF-8")
-        .body("download success");
+            then.status(200)
+                .header("content-type", "text/html; charset=UTF-8")
+                .body("download success");
         });
 
         // 2. 执行下载
-        let temp_dir = PathBuf::from("./test/temp");
-        let test_file = temp_dir.join("success.txt");
+        let temp_dir = PathBuf::from("./tests/temp");
+        ensure_path(&temp_dir).assert("path");
+        let test_file = temp_dir.join("unkonw.txt");
         if test_file.exists() {
             std::fs::remove_file(&test_file).owe_res()?;
         }
@@ -310,8 +282,8 @@ mod tests {
             )),
         );
         let http_addr = HttpAddr::from(server.url("/unkonw.txt"));
-        let http_accessor = HttpAccessor::default().with_redirect(Some(redirect));
 
+        let http_accessor = HttpAccessor::default().with_redirect(Some(redirect));
         http_accessor
             .update_local(
                 &AddrType::from(http_addr),
@@ -329,11 +301,13 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn test_http_addr() -> AddrResult<()> {
         let path = PathBuf::from("/tmp");
-        let addr = HttpAddr::from("https://dy-sec-generic.pkg.coding.net/sec-hub/generic/warp-flow/wpflow?version=1.0.89-alpha")
-            .with_credentials(
-                "generic-1747535977632",
-                "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
-            );
+        let addr = HttpAddr::from(
+            "https://dy-sec-generic.pkg.coding.net/sec-hub/generic/warp-flow/wpflow?version=1.0.89-alpha",
+        )
+        .with_credentials(
+                    "generic-1747535977632",
+                    "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
+                );
         let http_accessor = HttpAccessor::default();
         http_accessor
             .update_local(&AddrType::from(addr), &path, &UpdateOptions::for_test())
@@ -362,12 +336,13 @@ mod tests {
             .owe_sys()?;
 
         // 3. 执行上传
-        let http_addr = HttpAccessor::from(server.url("/upload")).with_credentials(
+        let http_addr = HttpAddr::from(server.url("/upload")).with_credentials(
             "generic-1747535977632",
             "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
         );
+        let http_accessor = HttpAccessor::default();
 
-        http_addr.upload(&file_path, "POST").await?;
+        http_accessor.upload(&http_addr, &file_path, "POST").await?;
 
         // 4. 验证结果
         mock.assert();
@@ -393,69 +368,17 @@ mod tests {
             .owe_sys()?;
 
         // 3. 执行上传
-        let http_addr = HttpAccessor::from(server.url("/upload_put")).with_credentials(
+        let http_addr = HttpAddr::from(server.url("/upload_put")).with_credentials(
             "generic-1747535977632",
             "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
         );
+        let http_accessor = HttpAccessor::default();
 
-        http_addr.upload(&file_path, "PUT").await?;
+        http_accessor.upload(&http_addr, &file_path, "PUT").await?;
 
         // 4. 验证结果
         mock.assert();
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests2 {
-    use super::*;
-
-    #[test]
-    fn test_get_filename_with_regular_url() {
-        let addr = HttpAccessor::from("http://example.com/file.txt");
-        assert_eq!(addr.get_filename(), Some("file.txt".to_string()));
-    }
-
-    #[test]
-    fn test_get_filename_with_query_params() {
-        let addr = HttpAccessor::from("http://example.com/file.txt?version=1.0");
-        assert_eq!(addr.get_filename(), Some("file.txt".to_string()));
-    }
-
-    #[test]
-    fn test_get_filename_with_fragment() {
-        let addr = HttpAccessor::from("http://example.com/file.txt#section1");
-        assert_eq!(addr.get_filename(), Some("file.txt".to_string()));
-    }
-
-    #[test]
-    fn test_get_filename_with_multiple_path_segments() {
-        let addr = HttpAccessor::from("http://example.com/path/to/file.txt");
-        assert_eq!(addr.get_filename(), Some("file.txt".to_string()));
-    }
-
-    #[test]
-    fn test_get_filename_with_trailing_slash() {
-        let addr = HttpAccessor::from("http://example.com/path/");
-        assert_eq!(addr.get_filename(), None);
-    }
-
-    #[test]
-    fn test_get_filename_with_empty_path() {
-        let addr = HttpAccessor::from("http://example.com");
-        assert_eq!(addr.get_filename(), None);
-    }
-
-    #[test]
-    fn test_get_filename_with_invalid_url() {
-        let addr = HttpAccessor::from("not a valid url");
-        assert_eq!(addr.get_filename(), None);
-    }
-
-    #[test]
-    fn test_get_filename_with_encoded_characters() {
-        let addr = HttpAccessor::from("http://example.com/file%20name.txt");
-        assert_eq!(addr.get_filename(), Some("file%20name.txt".to_string()));
     }
 }
 
@@ -485,13 +408,18 @@ mod test3 {
             .owe_sys()?;
 
         // 3. 执行上传
-        let http_addr = HttpAccessor::from(server.url("/upload")).with_credentials(
+        let http_addr = HttpAddr::from(server.url("/upload")).with_credentials(
             "generic-1747535977632",
             "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
         );
+        let http_accessor = HttpAccessor::default();
 
-        http_addr
-            .update_remote(&file_path, &UpdateOptions::for_test())
+        http_accessor
+            .update_remote(
+                &AddrType::from(http_addr),
+                &file_path,
+                &UpdateOptions::for_test(),
+            )
             .await?;
 
         // 4. 验证结果
