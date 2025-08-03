@@ -8,30 +8,7 @@ use home::home_dir;
 ///
 /// # Token认证示例
 ///
-/// ```rust
-/// use orion_variate::addr::GitAddr;
-///
-/// // GitHub Token认证
-/// let addr = GitAddr::from("https://github.com/user/repo.git")
-///     .with_github_token("your_github_token");
-///
-/// // GitLab Token认证
-/// let addr = GitAddr::from("https://gitlab.com/user/repo.git")
-///     .with_gitlab_token("your_gitlab_token");
-///
-/// // 通用Token认证
-/// let addr = GitAddr::from("https://gitea.com/user/repo.git")
-///     .with_username("your_username")
-///     .with_token("your_token");
-///
-/// // 从环境变量读取Token
-/// let addr = GitAddr::from("https://github.com/user/repo.git")
-///     .with_github_env_token();
-///
-/// // 从~/.git-credentials文件读取Token
-/// let addr = GitAddr::from("https://github.com/user/repo.git")
-///     .with_git_credentials();
-/// ```
+
 #[derive(Clone, Debug, Serialize, Deserialize, Default, Getters, Setters, WithSetters)]
 #[getset(get = "pub", set = "pub")]
 #[serde(rename = "git")]

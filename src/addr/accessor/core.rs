@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use derive_more::From;
 
 use crate::addr::{AddrResult, Address};
-use crate::types::{ResourceDownloader, ResourceDownloader, UpdateUnit};
+use crate::types::{ResourceDownloader, ResourceUploader, UpdateUnit};
 use crate::update::UpdateOptions;
 use std::path::Path;
 
@@ -38,17 +38,17 @@ impl ResourceDownloader for AddrAccessor {
 }
 
 #[async_trait]
-impl ResourceDownloader for AddrAccessor {
-    async fn update_remote(
+impl ResourceUploader for AddrAccessor {
+    async fn upload_from_local(
         &self,
         addr: &Address,
         path: &Path,
         options: &UpdateOptions,
     ) -> AddrResult<UpdateUnit> {
         match self {
-            AddrAccessor::Git(o) => o.update_remote(addr, path, options).await,
-            AddrAccessor::Http(o) => o.update_remote(addr, path, options).await,
-            AddrAccessor::Local(o) => o.update_remote(addr, path, options).await,
+            AddrAccessor::Git(o) => o.upload_from_local(addr, path, options).await,
+            AddrAccessor::Http(o) => o.upload_from_local(addr, path, options).await,
+            AddrAccessor::Local(o) => o.upload_from_local(addr, path, options).await,
         }
     }
 }

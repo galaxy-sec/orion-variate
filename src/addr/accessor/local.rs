@@ -6,7 +6,7 @@ use fs_extra::dir::CopyOptions;
 use orion_error::{ToStructError, UvsResFrom};
 use orion_infra::auto_exit_log;
 
-use crate::types::ResourceDownloader;
+use crate::types::ResourceUploader;
 
 #[derive(Getters, Clone, Debug, Default)]
 pub struct LocalAccessor {}
@@ -74,8 +74,8 @@ impl ResourceDownloader for LocalAccessor {
 }
 
 #[async_trait]
-impl ResourceDownloader for LocalAccessor {
-    async fn update_remote(
+impl ResourceUploader for LocalAccessor {
+    async fn upload_from_local(
         &self,
         addr: &Address,
         path: &Path,
@@ -276,7 +276,7 @@ mod tests {
         let addr_type = Address::Local(local_addr.clone());
 
         LocalAccessor::default()
-            .update_remote(&addr_type, file_path.as_path(), &UpdateOptions::for_test())
+            .upload_from_local(&addr_type, file_path.as_path(), &UpdateOptions::for_test())
             .await?;
 
         assert!(target_dir.join("file.txt").exists());
@@ -301,7 +301,7 @@ mod tests {
         let local_addr = LocalPath::from(version_1.to_str().unwrap_or("~/temp"));
         let addr_type = Address::Local(local_addr.clone());
         LocalAccessor::default()
-            .update_remote(&addr_type, &version_2, &UpdateOptions::for_test())
+            .upload_from_local(&addr_type, &version_2, &UpdateOptions::for_test())
             .await?;
 
         assert!(version_1.join("version_2").exists());

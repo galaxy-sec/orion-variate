@@ -1,8 +1,7 @@
 use crate::addr::proxy::ProxyConfig;
 use crate::addr::redirect::serv::RedirectService;
 use crate::addr::{AddrReason, AddrResult, Address, GitRepository};
-use crate::types::ResourceDownloader;
-use crate::{predule::*, tools::get_repo_name, types::ResourceDownloader, update::UpdateOptions};
+use crate::{predule::*, tools::get_repo_name, types::{ResourceDownloader, ResourceUploader}, update::UpdateOptions};
 use async_trait::async_trait;
 use fs_extra::dir::CopyOptions;
 use getset::{Getters, Setters, WithSetters};
@@ -21,30 +20,7 @@ use orion_infra::path::ensure_path;
 ///
 /// # Token认证示例
 ///
-/// ```rust
-/// use orion_variate::addr::GitAddr;
-///
-/// // GitHub Token认证
-/// let addr = GitAddr::from("https://github.com/user/repo.git")
-///     .with_github_token("your_github_token");
-///
-/// // GitLab Token认证
-/// let addr = GitAddr::from("https://gitlab.com/user/repo.git")
-///     .with_gitlab_token("your_gitlab_token");
-///
-/// // 通用Token认证
-/// let addr = GitAddr::from("https://gitea.com/user/repo.git")
-///     .with_username("your_username")
-///     .with_token("your_token");
-///
-/// // 从环境变量读取Token
-/// let addr = GitAddr::from("https://github.com/user/repo.git")
-///     .with_github_env_token();
-///
-/// // 从~/.git-credentials文件读取Token
-/// let addr = GitAddr::from("https://github.com/user/repo.git")
-///     .with_git_credentials();
-/// ```
+
 #[derive(Clone, Debug, Default, Getters, Setters, WithSetters)]
 #[getset(get = "pub", set = "pub")]
 pub struct GitAccessor {
@@ -377,8 +353,8 @@ impl ResourceDownloader for GitAccessor {
 }
 
 #[async_trait]
-impl ResourceDownloader for GitAccessor {
-    async fn update_remote(
+impl ResourceUploader for GitAccessor {
+    async fn upload_from_local(
         &self,
         addr: &Address,
         path: &Path,
@@ -840,8 +816,8 @@ mod tests {
         Ok(())
     }
 
-    use crate::types::ResourceDownloader;
-    use crate::{addr::GitRepository, update::UpdateOptions};
+    use crate::types::{ResourceDownloader, ResourceUploader};
+use crate::{addr::GitRepository, update::UpdateOptions};
 
     #[ignore = "no run in ci"]
     #[tokio::test]
@@ -857,7 +833,7 @@ mod tests {
         let addr_type = Address::Git(git_addr.clone());
         let accessor = GitAccessor::default();
         let git_up = accessor
-            .update_remote(&addr_type, &dir, &UpdateOptions::default())
+            .upload_from_local(&addr_type, &dir, &UpdateOptions::default())
             .await?;
         println!("{:?}", git_up.position);
         Ok(())
@@ -876,7 +852,7 @@ mod tests {
         let addr_type = Address::Git(git_addr.clone());
         let accessor = GitAccessor::default();
         let git_up = accessor
-            .update_remote(&addr_type, &file, &UpdateOptions::default())
+            .upload_from_local(&addr_type, &file, &UpdateOptions::default())
             .await?;
         println!("{:?}", git_up.position);
         Ok(())

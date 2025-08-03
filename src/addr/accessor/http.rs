@@ -13,7 +13,7 @@ use orion_error::{ToStructError, UvsResFrom};
 use tokio::io::AsyncWriteExt;
 use tracing::info;
 
-use crate::types::ResourceDownloader;
+use crate::types::ResourceUploader;
 
 #[derive(Getters, Clone, Debug, WithSetters, Default)]
 #[getset(get = "pub")]
@@ -174,8 +174,8 @@ impl ResourceDownloader for HttpAccessor {
 }
 
 #[async_trait]
-impl ResourceDownloader for HttpAccessor {
-    async fn update_remote(
+impl ResourceUploader for HttpAccessor {
+    async fn upload_from_local(
         &self,
         addr: &Address,
         path: &Path,
@@ -415,7 +415,7 @@ mod test3 {
         let http_accessor = HttpAccessor::default();
 
         http_accessor
-            .update_remote(
+            .upload_from_local(
                 &Address::from(http_addr),
                 &file_path,
                 &UpdateOptions::for_test(),
