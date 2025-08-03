@@ -64,7 +64,7 @@ impl TryFrom<&PathBuf> for DirectServ {
     type Error = AddrError;
 
     fn try_from(value: &PathBuf) -> Result<Self, Self::Error> {
-        Ok(DirectServ::from_yml(value).owe_res().with(value)?)
+        DirectServ::from_yml(value).owe_res().with(value)
     }
 }
 

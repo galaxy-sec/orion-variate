@@ -78,9 +78,9 @@ impl Unit {
     //GitAddr
     pub fn direct_git_addr(&self, input: &GitAddr) -> Option<GitAddr> {
         for rule in &self.rules {
-            let result = rule.replace(&input.repo());
+            let result = rule.replace(input.repo());
             if let Some(result) = result {
-                info!(target:"git", "redirect to {result}, origin:{}",input.repo() );
+                info!(target:"git", "redirect to {result}, origin: {}", input.repo());
                 let mut direct = input.clone();
                 direct.set_repo(result);
                 if let Some(auth) = self.auth() {

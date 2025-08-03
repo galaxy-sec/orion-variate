@@ -473,7 +473,7 @@ impl GitAccessor {
         builder.fetch_options(fetch_options);
 
         // 执行克隆
-        let repo = builder.clone(&repo_addr.repo(), target_dir)?;
+        let repo = builder.clone(repo_addr.repo(), target_dir)?;
 
         flag.mark_suc();
         // 处理检出目标

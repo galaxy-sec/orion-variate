@@ -1,8 +1,8 @@
-mod accessor;
+mod core;
 mod git;
 mod http;
 mod local;
-pub use accessor::AddrAccessor;
+pub use core::AddrAccessor;
 pub use git::GitAccessor;
 pub use http::HttpAccessor;
 pub use local::LocalAccessor;

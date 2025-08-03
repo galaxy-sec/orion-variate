@@ -38,7 +38,7 @@ fn test_git_proxy() {
     let test_repo = "https://github.com/galaxy-sec/hello-word.git";
     let git_addr = GitAddr::from(test_repo);
 
-    println!("测试仓库: {}", test_repo);
+    println!("测试仓库: {test_repo}");
 
     // 测试代理配置
     match accessor.proxy() {
@@ -67,7 +67,7 @@ fn test_git_proxy() {
                     println!("代理配置验证通过 - 克隆操作成功完成");
                 }
                 Err(e) => {
-                    println!("克隆失败: {}", e);
+                    println!("克隆失败: {e}");
                     // 在测试环境中，允许克隆失败，但验证代理配置被正确应用
                     println!("测试环境可能无法访问外部仓库，但代理配置已正确加载");
                 }

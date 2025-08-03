@@ -110,9 +110,11 @@ impl FromStr for AddrType {
             Ok(AddrType::Git(GitAddr::from(s)))
         } else if s.starts_with("http://") || s.starts_with("https://") {
             Ok(AddrType::Http(HttpAddr::from(s)))
-        } else if s.starts_with("./") || s.starts_with("/") || s.starts_with("~") {
-            Ok(AddrType::Local(LocalAddr::from(s)))
-        } else if !s.contains("://") && std::path::Path::new(s).exists() {
+        } else if s.starts_with("./")
+            || s.starts_with("/")
+            || s.starts_with("~")
+            || (!s.contains("://") && std::path::Path::new(s).exists())
+        {
             Ok(AddrType::Local(LocalAddr::from(s)))
         } else if s.contains("github.com") || s.contains("gitlab.com") || s.contains("gitea.com") {
             Ok(AddrType::Git(GitAddr::from(s)))

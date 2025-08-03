@@ -25,8 +25,7 @@ impl Rule {
             // 找到模式中的通配符位置
             if let Some(star_idx) = self.pattern.find('*') {
                 let prefix = &self.pattern[..star_idx];
-                if input.starts_with(prefix) {
-                    let suffix = &input[prefix.len()..];
+                if let Some(suffix) = input.strip_prefix(prefix) {
                     return Some(format!("{}{suffix}", self.target));
                 }
             }
