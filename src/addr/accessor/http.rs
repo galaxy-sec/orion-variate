@@ -309,10 +309,15 @@ mod tests {
                 "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
             )),
         );
-        let http_addr = HttpAddr::from(server.url("/unkonw.txt")).with_redirect(Some(redirect));
+        let http_addr = HttpAddr::from(server.url("/unkonw.txt"));
+        let http_accessor = HttpAccessor::default().with_redirect(Some(redirect));
 
-        http_addr
-            .update_local(&temp_dir, &UpdateOptions::for_test())
+        http_accessor
+            .update_local(
+                &AddrType::from(http_addr),
+                &temp_dir,
+                &UpdateOptions::for_test(),
+            )
             .await?;
 
         // 3. 验证结果
@@ -329,7 +334,10 @@ mod tests {
                 "generic-1747535977632",
                 "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
             );
-        addr.update_local(&path, &UpdateOptions::for_test()).await?;
+        let http_accessor = HttpAccessor::default();
+        http_accessor
+            .update_local(&AddrType::from(addr), &path, &UpdateOptions::for_test())
+            .await?;
         Ok(())
     }
 
