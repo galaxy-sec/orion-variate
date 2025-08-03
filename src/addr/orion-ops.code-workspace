@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": "../../../orion-ops"
+		},
+		{
+			"path": "../../../orion_common"
+		},
+		{
+			"path": "../../../orion_infra"
+		},
+		{
+			"path": "../.."
+		}
+	],
+	"settings": {}
+}

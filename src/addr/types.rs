@@ -1,18 +1,23 @@
 use crate::types::RemoteUpdate;
 use crate::{predule::*, update::UpdateOptions, vars::EnvDict};
-use derive_more::From;
+use derive_more::{Display, From};
 
 use crate::{types::LocalUpdate, vars::EnvEvalable};
 
 use super::{AddrResult, GitAddr, HttpAddr, LocalAddr};
+use std::str::FromStr;
+use thiserror::Error;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Display)]
 #[serde(untagged)]
 pub enum AddrType {
+    #[display("git")]
     #[serde(rename = "git")]
     Git(GitAddr),
+    #[display("http")]
     #[serde(rename = "http")]
     Http(HttpAddr),
+    #[display("local")]
     #[serde(rename = "local")]
     Local(LocalAddr),
 }
@@ -29,7 +34,12 @@ impl EnvEvalable<AddrType> for AddrType {
 
 #[async_trait]
 impl LocalUpdate for AddrType {
-    async fn update_local(&self, path: &Path, options: &UpdateOptions) -> AddrResult<UpdateUnit> {
+    async fn update_local(
+        &self,
+        addr: &AddrType,
+        path: &Path,
+        options: &UpdateOptions,
+    ) -> AddrResult<UpdateUnit> {
         let ins = self.clone().env_eval(options.values());
         match ins {
             AddrType::Git(addr) => addr.update_local(path, options).await,
@@ -40,6 +50,7 @@ impl LocalUpdate for AddrType {
 
     async fn update_local_rename(
         &self,
+        addr: &AddrType,
         path: &Path,
         name: &str,
         options: &UpdateOptions,
@@ -55,7 +66,12 @@ impl LocalUpdate for AddrType {
 
 #[async_trait]
 impl RemoteUpdate for AddrType {
-    async fn update_remote(&self, path: &Path, options: &UpdateOptions) -> AddrResult<UpdateUnit> {
+    async fn update_remote(
+        &self,
+        addr: &AddrType,
+        path: &Path,
+        options: &UpdateOptions,
+    ) -> AddrResult<UpdateUnit> {
         let ins = self.clone().env_eval(options.values());
         match ins {
             AddrType::Git(addr) => addr.update_remote(path, options).await,
@@ -124,5 +140,40 @@ impl From<&Path> for EnvVarPath {
         Self {
             origin: format!("{}", value.display()),
         }
+    }
+}
+
+/// 地址类型解析错误
+#[derive(Debug, Error)]
+pub enum AddrParseError {
+    #[error("invalid address format: {0}")]
+    InvalidFormat(String),
+}
+
+impl FromStr for AddrType {
+    type Err = AddrParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.trim();
+
+        if s.starts_with("git@") || s.starts_with("https://") && s.contains(".git") {
+            Ok(AddrType::Git(GitAddr::from(s)))
+        } else if s.starts_with("http://") || s.starts_with("https://") {
+            Ok(AddrType::Http(HttpAddr::from(s)))
+        } else if s.starts_with("./") || s.starts_with("/") || s.starts_with("~") {
+            Ok(AddrType::Local(LocalAddr::from(s)))
+        } else if !s.contains("://") && std::path::Path::new(s).exists() {
+            Ok(AddrType::Local(LocalAddr::from(s)))
+        } else if s.contains("github.com") || s.contains("gitlab.com") || s.contains("gitea.com") {
+            Ok(AddrType::Git(GitAddr::from(s)))
+        } else {
+            Err(AddrParseError::InvalidFormat(s.to_string()))
+        }
+    }
+}
+
+impl<'a> From<&'a str> for AddrType {
+    fn from(s: &'a str) -> Self {
+        AddrType::from_str(s).unwrap_or_else(|_| AddrType::Local(LocalAddr::from(s)))
     }
 }

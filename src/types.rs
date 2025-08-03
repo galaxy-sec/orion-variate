@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use async_trait::async_trait;
 
 use crate::{
-    addr::{AddrResult, rename_path},
+    addr::{AddrResult, AddrType, rename_path},
     update::UpdateOptions,
     vars::VarCollection,
 };
@@ -37,18 +37,29 @@ impl From<PathBuf> for UpdateUnit {
 
 #[async_trait]
 pub trait RemoteUpdate {
-    async fn update_remote(&self, path: &Path, options: &UpdateOptions) -> AddrResult<UpdateUnit>;
+    async fn update_remote(
+        &self,
+        addr: &AddrType,
+        path: &Path,
+        options: &UpdateOptions,
+    ) -> AddrResult<UpdateUnit>;
 }
 #[async_trait]
 pub trait LocalUpdate {
-    async fn update_local(&self, path: &Path, options: &UpdateOptions) -> AddrResult<UpdateUnit>;
+    async fn update_local(
+        &self,
+        addr: &AddrType,
+        path: &Path,
+        options: &UpdateOptions,
+    ) -> AddrResult<UpdateUnit>;
     async fn update_local_rename(
         &self,
+        addr: &AddrType,
         path: &Path,
         name: &str,
         options: &UpdateOptions,
     ) -> AddrResult<UpdateUnit> {
-        let mut target = self.update_local(path, options).await?;
+        let mut target = self.update_local(addr, path, options).await?;
         let path = rename_path(target.position(), name)?;
         target.set_position(path);
         Ok(target)
