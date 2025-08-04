@@ -171,16 +171,27 @@ units:
 ### 在代码中使用
 
 ```rust
-use orion_variate::addr::redirect::DirectServ;
+use orion_variate::addr::redirect::RedirectService;
 use std::path::PathBuf;
 
 // 从文件加载配置
 let config_path = PathBuf::from("redirect.yml");
-let direct_serv = DirectServ::try_from(&config_path)?;
+let redirect_service = RedirectService::try_from(&config_path)?;
 
 // 应用重定向
 let original_url = "https://github.com/user/repo.git";
-let redirected_url = direct_serv.redirect(original_url);
+let redirected_url = redirect_service.redirect(original_url);
+
+// 针对特定类型的地址进行重定向
+use orion_variate::addr::{HttpResource, GitRepository};
+
+// HTTP资源重定向
+let http_addr = HttpResource::from("https://github.com/user/repo");
+let redirected_http = redirect_service.direct_http_addr(http_addr);
+
+// Git仓库重定向
+let git_addr = GitRepository::from("https://github.com/user/repo.git");
+let redirected_git = redirect_service.direct_git_addr(git_addr);
 ```
 
 ### 在配置中使用
@@ -194,10 +205,74 @@ variables:
       file: "./redirect.yml"  # 指定重定向配置文件
 ```
 
+### 编程式创建
+
+```rust
+use orion_variate::addr::redirect::{RedirectService, Rule, AuthConfig};
+
+// 通过规则创建
+let rule = Rule::new("https://github.com/*", "https://mirror.github.com/");
+let auth = Some(AuthConfig::new("username", "password"));
+let redirect_service = RedirectService::from_rule(rule, auth);
+
+// 或者通过配置创建
+let redirect_service = RedirectService::new(
+    vec![
+        Unit::new(
+            vec![
+                Rule::new("https://github.com/*", "https://mirror1.com/"),
+                Rule::new("https://gitlab.com/*", "https://mirror2.com/"),
+            ],
+            Some(AuthConfig::new("user", "pass"))
+        )
+    ],
+    true
+);
+```
+
+## API参考
+
+### 主要结构体
+
+#### RedirectService
+主重定向服务结构体，负责管理和应用重定向规则。
+
+**方法：**
+- `new(units: Vec<Unit>, enable: bool) -> Self` - 创建新的重定向服务
+- `try_from(&PathBuf) -> Result<Self, AddrError>` - 从配置文件加载
+- `redirect(&self, url: &str) -> RedirectResult` - 通用URL重定向
+- `direct_http_addr(&self, origin: HttpResource) -> HttpResource` - HTTP资源重定向
+- `direct_git_addr(&self, origin: GitRepository) -> GitRepository` - Git仓库重定向
+- `from_rule(rule: Rule, auth: Option<AuthConfig>) -> Self` - 从单个规则创建
+
+#### Rule
+重定向规则，定义URL匹配和替换逻辑。
+
+**方法：**
+- `new(pattern: &str, target: &str) -> Self` - 创建新规则
+- `replace(&self, input: &str) -> Option<String>` - 应用规则到URL
+
+#### Unit
+重定向单元，包含一组规则和可选认证信息。
+
+**方法：**
+- `new(rules: Vec<Rule>, auth: Option<AuthConfig>) -> Self` - 创建新单元
+- `rules() -> &[Rule]` - 获取规则列表
+- `auth() -> Option<&AuthConfig>` - 获取认证信息
+
+#### AuthConfig
+认证配置，支持用户名密码认证。
+
+**方法：**
+- `new(username: &str, password: &str) -> Self` - 创建认证配置
+- `username() -> &str` - 获取用户名
+- `password() -> &str` - 获取密码
+
 ## 调试和验证
 
 ### 验证配置文件
 
+#### 1. 配置文件格式验证
 ```bash
 # 验证YAML格式
 orion-variate validate --config redirect.yml
@@ -206,31 +281,183 @@ orion-variate validate --config redirect.yml
 orion-variate redirect-test --url "https://github.com/user/repo.git"
 ```
 
+#### 2. 编程式验证
+```rust
+use orion_variate::addr::redirect::RedirectService;
+use std::path::PathBuf;
+
+fn test_redirect_rules() -> Result<(), Box<dyn std::error::Error>> {
+    let config_path = PathBuf::from("redirect.yml");
+    let service = RedirectService::try_from(&config_path)?;
+    
+    // 测试单个URL
+    let test_url = "https://github.com/user/repo.git";
+    let result = service.redirect(test_url);
+    println!("Original: {} -> Redirected: {:?}", test_url, result);
+    
+    // 测试HTTP资源
+    use orion_variate::addr::HttpResource;
+    let http_addr = HttpResource::from("https://github.com/user/repo");
+    let redirected = service.direct_http_addr(http_addr);
+    println!("HTTP redirect: {} -> {}", http_addr.url(), redirected.url());
+    
+    Ok(())
+}
+```
+
+#### 3. 单元测试验证
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use orion_variate::addr::redirect::{RedirectService, Rule, AuthConfig};
+
+    #[test]
+    fn test_github_mirror() {
+        let rule = Rule::new("https://github.com/*", "https://mirror.github.com/");
+        let service = RedirectService::from_rule(rule, None);
+        
+        let result = service.redirect("https://github.com/user/repo.git");
+        assert_eq!(result.path(), "https://mirror.github.com/user/repo.git");
+    }
+
+    #[test]
+    fn test_no_match() {
+        let rule = Rule::new("https://github.com/*", "https://mirror.github.com/");
+        let service = RedirectService::from_rule(rule, None);
+        
+        let result = service.redirect("https://gitlab.com/user/repo.git");
+        assert_eq!(result.path(), "https://gitlab.com/user/repo.git");
+    }
+}
+```
+
 ### 调试输出
 
+#### 1. 环境变量调试
 启用调试日志查看重定向过程：
 
 ```bash
+# 基本调试
 RUST_LOG=debug orion-variate update
+
+# 详细调试（包括规则匹配过程）
+RUST_LOG=orion_variate::addr::redirect=trace orion-variate update
+
+# 输出到文件
+RUST_LOG=debug orion-variate update 2> redirect-debug.log
+```
+
+#### 2. 程序化调试
+```rust
+use log::{debug, info};
+
+fn debug_redirect_service(service: &RedirectService) {
+    info!("Redirect service enabled: {}", service.enable());
+    info!("Number of units: {}", service.units().len());
+    
+    for (i, unit) in service.units().iter().enumerate() {
+        debug!("Unit {}: {} rules, auth: {}", 
+               i, 
+               unit.rules().len(),
+               unit.auth().is_some());
+        
+        for (j, rule) in unit.rules().iter().enumerate() {
+            debug!("  Rule {}: {} -> {}", j, rule.pattern(), rule.target());
+        }
+    }
+}
 ```
 
 ## 常见问题
 
 ### Q: 规则不生效怎么办？
-- 检查 `enable: true` 是否设置
-- 确认配置文件路径正确
-- 检查YAML语法是否正确
-- 使用调试模式查看匹配过程
+**排查步骤：**
+1. 检查 `enable: true` 是否设置
+2. 确认配置文件路径正确
+3. 检查YAML语法是否正确（使用在线YAML验证器）
+4. 使用调试模式查看匹配过程：`RUST_LOG=debug`
+5. 确认文件权限可读
+6. 检查环境变量是否正确解析
 
 ### Q: 如何排除特定URL？
+**方法：**
 - 使用精确匹配覆盖通配符
 - 将排除规则放在前面
 - 使用空目标保持原URL
+- 创建专门的排除单元
 
-### Q: 性能如何？
-- 规则按顺序匹配，建议将常用规则放在前面
+**示例：**
+```yaml
+direct_serv:
+  enable: true
+  units:
+    # 排除规则（优先匹配）
+    - rules:
+        - pattern: "https://github.com/exclude/*"
+          target: "https://github.com/exclude/"  # 保持原URL
+    # 通用规则
+    - rules:
+        - pattern: "https://github.com/*"
+          target: "https://mirror.github.com/"
+```
+
+### Q: 性能如何优化？
+**优化建议：**
+- 规则按顺序匹配，将常用规则放在前面
 - 通配符使用高效的WildMatch算法
 - 建议规则数量控制在100条以内
+- 避免复杂的嵌套通配符
+- 使用精确匹配代替通配符（当可能时）
+
+### Q: 如何支持多个镜像源？
+**配置示例：**
+```yaml
+direct_serv:
+  enable: true
+  units:
+    # GitHub镜像1
+    - rules:
+        - pattern: "https://github.com/*"
+          target: "https://hub.fastgit.org/"
+    # GitHub镜像2（备用）
+    - rules:
+        - pattern: "https://github.com/*"
+          target: "https://ghproxy.com/"
+    # GitLab镜像
+    - rules:
+        - pattern: "https://gitlab.com/*"
+          target: "https://gitlab.cnpmjs.org/"
+```
+
+### Q: 环境变量不生效？
+**检查：**
+- 环境变量名是否正确（区分大小写）
+- 默认值语法：`${VAR:-default}`
+- 特殊字符需要转义
+- 在shell中测试：`echo $MY_VAR`
+
+### Q: 如何处理HTTPS证书问题？
+**解决方案：**
+- 使用正确的镜像源（支持HTTPS）
+- 配置系统证书
+- 使用HTTP镜像源（不推荐）
+- 配置代理服务器
+
+### Q: 如何调试规则匹配？
+**调试工具：**
+```bash
+# 创建测试脚本
+#!/bin/bash
+export RUST_LOG=orion_variate::addr::redirect=trace
+orion-variate redirect-test --url "$1"
+```
+
+### Q: 版本兼容性问题？
+- **v0.5.0+**：基本重定向
+- **v0.5.7+**：多Unit配置、环境变量
+- **v0.6.0+**：计划支持正则表达式
+- 升级时注意API变更（DirectServ -> RedirectService）
 
 ## 高级用法
 
