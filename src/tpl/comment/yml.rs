@@ -120,7 +120,13 @@ pub fn ignore_comment_line(status: &mut YmlStatus, input: &mut &str) -> ModalRes
                 let _ = till_line_ending
                     .context(wn_desc("comment-line"))
                     .parse_next(input)?;
-                //let _ = opt(line_ending) .context(wn_desc("comment-line_ending")) .parse_next(input)?;
+                if opt(line_ending)
+                    .context(wn_desc("comment-line_ending"))
+                    .parse_next(input)?
+                    .is_some()
+                {
+                    line += "\n";
+                }
                 *status = YmlStatus::Code;
             }
         }
@@ -345,4 +351,35 @@ kafka_connection_rate_limit: 1000
         let codes = remove_comment(yml.as_str()).assert();
         write_all(out_file, codes.as_str()).assert();
     }
+    #[test]
+    fn test_yaml_case2() {
+        let base_path = PathBuf::from("./test/data/yml");
+        std::fs::create_dir_all(&base_path).assert();
+
+        let codes = remove_comment(YAML_DATA).assert();
+        let excpet = r#"vector:
+  customConfigNamespace: ""
+    sinks:
+      vlogs:
+        request:
+          headers:
+            ProjectID: "0"
+      
+extraObjects: []
+"#;
+        assert_eq!(codes, excpet);
+    }
+
+    const YAML_DATA: &str = r#"
+vector:
+  customConfigNamespace: ""
+    sinks:
+      vlogs:
+        request:
+          headers:
+            ProjectID: "0"
+      
+# -- Add extra specs dynamically to this chart
+extraObjects: []
+"#;
 }
