@@ -1,7 +1,12 @@
 use crate::addr::proxy::ProxyConfig;
 use crate::addr::redirect::serv::RedirectService;
 use crate::addr::{AddrReason, AddrResult, Address, GitRepository};
-use crate::{predule::*, tools::get_repo_name, types::{ResourceDownloader, ResourceUploader}, update::UpdateOptions};
+use crate::{
+    predule::*,
+    tools::get_repo_name,
+    types::{ResourceDownloader, ResourceUploader},
+    update::UpdateOptions,
+};
 use async_trait::async_trait;
 use fs_extra::dir::CopyOptions;
 use getset::{Getters, Setters, WithSetters};
@@ -572,7 +577,12 @@ impl GitAccessor {
     }
 
     /// 提交
-    fn submit(&self, addr: &GitRepository, repo: &Repository, branch: &str) -> Result<(), git2::Error> {
+    fn submit(
+        &self,
+        addr: &GitRepository,
+        repo: &Repository,
+        branch: &str,
+    ) -> Result<(), git2::Error> {
         info!("git push origin {}", &branch);
         let branch_path = format!("refs/heads/{branch}",);
         // 拉取远程进行更新
@@ -679,8 +689,8 @@ mod tests {
         let dest_path = temp_dir.path().to_path_buf();
 
         // 使用一个小型测试仓库（这里使用 GitHub 上的一个测试仓库）
-        let git_addr =
-            GitRepository::from("https://github.com/galaxy-sec/hello-word.git").with_branch("master"); // 替换为实际测试分支
+        let git_addr = GitRepository::from("https://github.com/galaxy-sec/hello-word.git")
+            .with_branch("master"); // 替换为实际测试分支
 
         let accessor = GitAccessor::default();
         // 执行克隆
@@ -802,8 +812,8 @@ mod tests {
         }
 
         // 测试切换到非默认分支
-        let git_addr =
-            GitRepository::from("https://github.com/galaxy-sec/hello-word.git").with_branch("develop"); // 替换为实际测试分支
+        let git_addr = GitRepository::from("https://github.com/galaxy-sec/hello-word.git")
+            .with_branch("develop"); // 替换为实际测试分支
 
         let addr_type = Address::Git(git_addr.clone());
         let accessor = GitAccessor::default();
@@ -817,7 +827,7 @@ mod tests {
     }
 
     use crate::types::{ResourceDownloader, ResourceUploader};
-use crate::{addr::GitRepository, update::UpdateOptions};
+    use crate::{addr::GitRepository, update::UpdateOptions};
 
     #[ignore = "no run in ci"]
     #[tokio::test]
@@ -828,7 +838,8 @@ use crate::{addr::GitRepository, update::UpdateOptions};
         std::fs::create_dir_all(&dir).assert();
         std::fs::write(&file, "spec upload local dir to git repo.").assert();
 
-        let git_addr = GitRepository::from("git@github.com:galaxy-sec/spec_test.git").with_branch("main");
+        let git_addr =
+            GitRepository::from("git@github.com:galaxy-sec/spec_test.git").with_branch("main");
 
         let addr_type = Address::Git(git_addr.clone());
         let accessor = GitAccessor::default();
@@ -847,7 +858,8 @@ use crate::{addr::GitRepository, update::UpdateOptions};
 
         std::fs::write(&file, "spec upload local file to git repo.").assert();
 
-        let git_addr = GitRepository::from("git@github.com:galaxy-sec/spec_test.git").with_branch("main");
+        let git_addr =
+            GitRepository::from("git@github.com:galaxy-sec/spec_test.git").with_branch("main");
 
         let addr_type = Address::Git(git_addr.clone());
         let accessor = GitAccessor::default();
@@ -898,8 +910,9 @@ use crate::{addr::GitRepository, update::UpdateOptions};
         std::fs::create_dir_all(&dest_path).unwrap();
 
         // 测试cnb.cool仓库克隆
-        let git_addr = GitRepository::from("https://cnb.cool/dy-sec/ops/sys-operators/mac-devkit.git")
-            .with_branch("main");
+        let git_addr =
+            GitRepository::from("https://cnb.cool/dy-sec/ops/sys-operators/mac-devkit.git")
+                .with_branch("main");
 
         // 执行克隆
         let addr_type = Address::Git(git_addr.clone());
@@ -931,8 +944,8 @@ use crate::{addr::GitRepository, update::UpdateOptions};
         std::fs::create_dir_all(&dest_path).unwrap();
 
         // 测试cnb.cool仓库克隆（带token认证）
-        let git_addr =
-            GitRepository::from("https://cnb.cool/dy-sec/ops/mechanism/gxl-dayu.git").with_branch("main");
+        let git_addr = GitRepository::from("https://cnb.cool/dy-sec/ops/mechanism/gxl-dayu.git")
+            .with_branch("main");
         //.with_token("5WXpns1c2bISgpoPA8EdhtIOarC"); // 需要替换为实际token
         //.with_token("your-cnb-token"); // 需要替换为实际token
 
