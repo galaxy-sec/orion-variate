@@ -2,7 +2,7 @@
 //!
 //! 提供地址配置验证功能，确保地址格式正确且可访问
 
-use crate::addr::{constants, };
+use crate::addr::{constants };
 use std::path::Path;
 use url::Url;
 

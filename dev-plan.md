@@ -21,12 +21,10 @@
 
 ### 为RedirectService 的units 提供 EnvEvalable 能力
 [x] 方案已经设计好，放到tasks/redirect-service-env-eval-design.md 中。
-[ ] 执行设计方案
+[x] 执行设计方案
 
 ### 改进addr 的代码质量
 [x]创建addr::constants模块管理常量
 [x]添加配置验证方法
-[]改进测试覆盖率和命名
 []添加详细的日志记录
 []重构错误类型，增加具体错误分类,需要先设计出方案，确认后再行动
-[] 为所有公共API添加RustDoc文档

@@ -4,6 +4,7 @@ use crate::{
         redirect::{auth::AuthConfig, rule::Rule},
     },
     opt::OptionFrom,
+    vars::{EnvDict, EnvEvalable},
 };
 use derive_more::From;
 use getset::Getters;
@@ -97,6 +98,15 @@ impl Unit {
     }
 }
 
+impl EnvEvalable<Unit> for Unit {
+    fn env_eval(self, dict: &EnvDict) -> Unit {
+        Unit {
+            rules: self.rules.into_iter().map(|rule| rule.env_eval(dict)).collect(),
+            auth: self.auth.map(|auth| auth.env_eval(dict)),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -147,5 +157,57 @@ mod tests {
 
         assert_eq!(deserialized.rules().len(), 1);
         assert!(deserialized.auth().is_some());
+    }
+
+    #[test]
+    fn test_unit() {
+        let unit = Unit::new(vec![Rule::new("https://github.com/galaxy-sec/galaxy-flow*", "https://gflow.com")], None);
+        let git = GitRepository::from("https://github.com/galaxy-sec/galaxy-flow");
+        let result = unit.direct_git_addr(&git);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().repo(), "https://gflow.com");
+    }
+
+    #[test]
+    fn test_unit_env_eval() {
+        use crate::vars::{EnvDict, ValueType};
+
+        let mut env_dict = EnvDict::new();
+        env_dict.insert("DOMAIN".to_string(), ValueType::String("example.com".to_string()));
+        env_dict.insert("TARGET".to_string(), ValueType::String("redirect.com".to_string()));
+        env_dict.insert("USERNAME".to_string(), ValueType::String("test_user".to_string()));
+        env_dict.insert("PASSWORD".to_string(), ValueType::String("test_pass".to_string()));
+
+        let mut unit = Unit::new(vec![
+            Rule::new("https://${DOMAIN}/*", "https://${TARGET}"),
+        ], None);
+        unit.set_auth(AuthConfig::new("${USERNAME}".to_string(), "${PASSWORD}".to_string()));
+
+        let evaluated = unit.env_eval(&env_dict);
+
+        assert_eq!(evaluated.rules().len(), 1);
+        assert_eq!(evaluated.rules()[0].pattern(), "https://example.com/*");
+        assert_eq!(evaluated.rules()[0].target(), "https://redirect.com");
+        assert!(evaluated.auth().is_some());
+        assert_eq!(evaluated.auth().as_ref().unwrap().username(), "test_user");
+        assert_eq!(evaluated.auth().as_ref().unwrap().password(), "test_pass");
+    }
+
+    #[test]
+    fn test_unit_env_eval_without_auth() {
+        use crate::vars::{EnvDict, ValueType};
+
+        let mut env_dict = EnvDict::new();
+        env_dict.insert("DOMAIN".to_string(), ValueType::String("example.com".to_string()));
+
+        let unit = Unit::new(vec![
+            Rule::new("https://${DOMAIN}/*", "https://redirect.com"),
+        ], None);
+
+        let evaluated = unit.env_eval(&env_dict);
+
+        assert_eq!(evaluated.rules().len(), 1);
+        assert_eq!(evaluated.rules()[0].pattern(), "https://example.com/*");
+        assert!(evaluated.auth().is_none());
     }
 }
