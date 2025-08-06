@@ -7,3 +7,6 @@ pub use git::GitAccessor;
 pub use http::HttpAccessor;
 pub use local::LocalAccessor;
 pub use local::rename_path;
+mod universal;
+pub use universal::UniversalAccessor;
+pub use universal::UniversalConfig;
