@@ -23,7 +23,7 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test --all-features
+      - run: cargo test --all-features --test-threads=1
 
   fmt:
     name: Rustfmt
@@ -65,7 +65,7 @@ jobs:
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@cargo-llvm-cov
-      - run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+      - run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info  -- --test-threads=1
       - uses: codecov/codecov-action@v3
         with:
           files: lcov.info

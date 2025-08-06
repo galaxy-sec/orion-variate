@@ -1,9 +1,10 @@
-use async_trait::async_trait;
-
 use crate::addr::redirect::serv::RedirectService;
 use crate::addr::{AddrResult, Address};
 use crate::types::{ResourceDownloader, ResourceUploader, UpdateUnit};
 use crate::update::UpdateOptions;
+use async_trait::async_trait;
+use log::error;
+use orion_common::serde::Yamlable;
 use std::path::Path;
 
 use super::git::GitAccessor;
@@ -22,11 +23,25 @@ impl UniversalConfig {
         self.redirect = Some(redirect);
         self
     }
+    pub fn with_redirect_file(mut self, path: &Path) -> Self {
+        if path.exists() {
+            match RedirectService::from_yml(path) {
+                Ok(redirect) => {
+                    self.redirect = Some(redirect);
+                }
+                Err(e) => {
+                    error!("load redirect conf failed!\npath:{} \n{e}", path.display());
+                }
+            }
+        }
+        self
+    }
 }
 
 /// 统一地址访问器
 ///
 /// 提供统一的地址访问接口，根据地址类型自动选择合适的底层访问器
+#[derive(Debug, Default)]
 pub struct UniversalAccessor {
     git: GitAccessor,
     http: HttpAccessor,
