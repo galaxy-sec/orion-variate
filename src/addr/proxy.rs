@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use url::Url;
 
-use super::redirect::AuthConfig;
+use crate::addr::redirect::AuthConfig;
 #[derive(Clone, Debug, PartialEq)]
 pub enum ProxyType {
     Http,
