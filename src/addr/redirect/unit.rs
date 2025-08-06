@@ -101,7 +101,11 @@ impl Unit {
 impl EnvEvalable<Unit> for Unit {
     fn env_eval(self, dict: &EnvDict) -> Unit {
         Unit {
-            rules: self.rules.into_iter().map(|rule| rule.env_eval(dict)).collect(),
+            rules: self
+                .rules
+                .into_iter()
+                .map(|rule| rule.env_eval(dict))
+                .collect(),
             auth: self.auth.map(|auth| auth.env_eval(dict)),
         }
     }
@@ -161,7 +165,13 @@ mod tests {
 
     #[test]
     fn test_unit() {
-        let unit = Unit::new(vec![Rule::new("https://github.com/galaxy-sec/galaxy-flow*", "https://gflow.com")], None);
+        let unit = Unit::new(
+            vec![Rule::new(
+                "https://github.com/galaxy-sec/galaxy-flow*",
+                "https://gflow.com",
+            )],
+            None,
+        );
         let git = GitRepository::from("https://github.com/galaxy-sec/galaxy-flow");
         let result = unit.direct_git_addr(&git);
         assert!(result.is_some());
@@ -173,15 +183,31 @@ mod tests {
         use crate::vars::{EnvDict, ValueType};
 
         let mut env_dict = EnvDict::new();
-        env_dict.insert("DOMAIN".to_string(), ValueType::String("example.com".to_string()));
-        env_dict.insert("TARGET".to_string(), ValueType::String("redirect.com".to_string()));
-        env_dict.insert("USERNAME".to_string(), ValueType::String("test_user".to_string()));
-        env_dict.insert("PASSWORD".to_string(), ValueType::String("test_pass".to_string()));
+        env_dict.insert(
+            "DOMAIN".to_string(),
+            ValueType::String("example.com".to_string()),
+        );
+        env_dict.insert(
+            "TARGET".to_string(),
+            ValueType::String("redirect.com".to_string()),
+        );
+        env_dict.insert(
+            "USERNAME".to_string(),
+            ValueType::String("test_user".to_string()),
+        );
+        env_dict.insert(
+            "PASSWORD".to_string(),
+            ValueType::String("test_pass".to_string()),
+        );
 
-        let mut unit = Unit::new(vec![
-            Rule::new("https://${DOMAIN}/*", "https://${TARGET}"),
-        ], None);
-        unit.set_auth(AuthConfig::new("${USERNAME}".to_string(), "${PASSWORD}".to_string()));
+        let mut unit = Unit::new(
+            vec![Rule::new("https://${DOMAIN}/*", "https://${TARGET}")],
+            None,
+        );
+        unit.set_auth(AuthConfig::new(
+            "${USERNAME}".to_string(),
+            "${PASSWORD}".to_string(),
+        ));
 
         let evaluated = unit.env_eval(&env_dict);
 
@@ -198,11 +224,15 @@ mod tests {
         use crate::vars::{EnvDict, ValueType};
 
         let mut env_dict = EnvDict::new();
-        env_dict.insert("DOMAIN".to_string(), ValueType::String("example.com".to_string()));
+        env_dict.insert(
+            "DOMAIN".to_string(),
+            ValueType::String("example.com".to_string()),
+        );
 
-        let unit = Unit::new(vec![
-            Rule::new("https://${DOMAIN}/*", "https://redirect.com"),
-        ], None);
+        let unit = Unit::new(
+            vec![Rule::new("https://${DOMAIN}/*", "https://redirect.com")],
+            None,
+        );
 
         let evaluated = unit.env_eval(&env_dict);
 

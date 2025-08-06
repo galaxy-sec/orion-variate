@@ -72,7 +72,11 @@ impl TryFrom<&PathBuf> for RedirectService {
 impl EnvEvalable<RedirectService> for RedirectService {
     fn env_eval(self, dict: &EnvDict) -> RedirectService {
         RedirectService {
-            units: self.units.into_iter().map(|unit| unit.env_eval(dict)).collect(),
+            units: self
+                .units
+                .into_iter()
+                .map(|unit| unit.env_eval(dict))
+                .collect(),
             enable: self.enable,
         }
     }
@@ -311,9 +315,16 @@ enable: false
 
     #[test]
     fn test_redirect_service() {
-        let service = RedirectService::new(vec![
-            Unit::new(vec![Rule::new("https://github.com/galaxy-sec/galaxy-flow*", "https://gflow.com")], None),
-        ], true);
+        let service = RedirectService::new(
+            vec![Unit::new(
+                vec![Rule::new(
+                    "https://github.com/galaxy-sec/galaxy-flow*",
+                    "https://gflow.com",
+                )],
+                None,
+            )],
+            true,
+        );
         let result = service.redirect("https://github.com/galaxy-sec/galaxy-flow");
         match result {
             RedirectResult::Direct(path, _) => {
@@ -328,41 +339,77 @@ enable: false
         use crate::vars::{EnvDict, ValueType};
 
         let mut env_dict = EnvDict::new();
-        env_dict.insert("DOMAIN".to_string(), ValueType::String("example.com".to_string()));
-        env_dict.insert("TARGET".to_string(), ValueType::String("redirect.com".to_string()));
-        env_dict.insert("USERNAME".to_string(), ValueType::String("test_user".to_string()));
+        env_dict.insert(
+            "DOMAIN".to_string(),
+            ValueType::String("example.com".to_string()),
+        );
+        env_dict.insert(
+            "TARGET".to_string(),
+            ValueType::String("redirect.com".to_string()),
+        );
+        env_dict.insert(
+            "USERNAME".to_string(),
+            ValueType::String("test_user".to_string()),
+        );
 
-        let service = RedirectService::new(vec![
-            Unit::new(vec![
-                Rule::new("https://${DOMAIN}/*", "https://${TARGET}"),
-            ], None),
-            Unit::new(vec![
-                Rule::new("https://github.com/*", "https://mirror.${DOMAIN}"),
-            ], Some(AuthConfig::new("${USERNAME}", "password"))),
-        ], true);
+        let service = RedirectService::new(
+            vec![
+                Unit::new(
+                    vec![Rule::new("https://${DOMAIN}/*", "https://${TARGET}")],
+                    None,
+                ),
+                Unit::new(
+                    vec![Rule::new(
+                        "https://github.com/*",
+                        "https://mirror.${DOMAIN}",
+                    )],
+                    Some(AuthConfig::new("${USERNAME}", "password")),
+                ),
+            ],
+            true,
+        );
 
         let evaluated = service.env_eval(&env_dict);
 
         assert_eq!(evaluated.units().len(), 2);
-        assert_eq!(evaluated.units()[0].rules()[0].pattern(), "https://example.com/*");
-        assert_eq!(evaluated.units()[0].rules()[0].target(), "https://redirect.com");
+        assert_eq!(
+            evaluated.units()[0].rules()[0].pattern(),
+            "https://example.com/*"
+        );
+        assert_eq!(
+            evaluated.units()[0].rules()[0].target(),
+            "https://redirect.com"
+        );
         assert!(evaluated.units()[0].auth().is_none());
 
-        assert_eq!(evaluated.units()[1].rules()[0].pattern(), "https://github.com/*");
-        assert_eq!(evaluated.units()[1].rules()[0].target(), "https://mirror.example.com");
+        assert_eq!(
+            evaluated.units()[1].rules()[0].pattern(),
+            "https://github.com/*"
+        );
+        assert_eq!(
+            evaluated.units()[1].rules()[0].target(),
+            "https://mirror.example.com"
+        );
         assert!(evaluated.units()[1].auth().is_some());
-        assert_eq!(evaluated.units()[1].auth().as_ref().unwrap().username(), "test_user");
+        assert_eq!(
+            evaluated.units()[1].auth().as_ref().unwrap().username(),
+            "test_user"
+        );
     }
 
     #[test]
     fn test_redirect_service_env_eval_disabled() {
-        use crate::vars::{EnvDict, ValueType};
+        use crate::vars::EnvDict;
 
         let env_dict = EnvDict::new();
 
-        let service = RedirectService::new(vec![
-            Unit::new(vec![Rule::new("https://github.com/*", "https://mirror.com")], None),
-        ], false);
+        let service = RedirectService::new(
+            vec![Unit::new(
+                vec![Rule::new("https://github.com/*", "https://mirror.com")],
+                None,
+            )],
+            false,
+        );
 
         let evaluated = service.env_eval(&env_dict);
 

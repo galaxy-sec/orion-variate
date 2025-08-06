@@ -1,7 +1,7 @@
+use crate::vars::{EnvDict, EnvEvalable};
 use getset::Getters;
 use serde_derive::{Deserialize, Serialize};
 use wildmatch::WildMatch;
-use crate::vars::{EnvDict, EnvEvalable};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Getters)]
 #[getset(get = "pub")]
@@ -37,6 +37,11 @@ impl Rule {
         }
     }
 }
+impl EnvEvalable<Rule> for Rule {
+    fn env_eval(self, dict: &EnvDict) -> Rule {
+        Rule::new(self.pattern.env_eval(dict), self.target.env_eval(dict))
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -57,8 +62,14 @@ mod tests {
         use crate::vars::{EnvDict, ValueType};
 
         let mut env_dict = EnvDict::new();
-        env_dict.insert("DOMAIN".to_string(), ValueType::String("example.com".to_string()));
-        env_dict.insert("TARGET".to_string(), ValueType::String("redirect.com".to_string()));
+        env_dict.insert(
+            "DOMAIN".to_string(),
+            ValueType::String("example.com".to_string()),
+        );
+        env_dict.insert(
+            "TARGET".to_string(),
+            ValueType::String("redirect.com".to_string()),
+        );
 
         let rule = Rule::new("https://${DOMAIN}/*", "https://${TARGET}");
         let evaluated = rule.env_eval(&env_dict);
@@ -69,23 +80,17 @@ mod tests {
 
     #[test]
     fn test_rule_env_eval_with_defaults() {
-        use crate::vars::{EnvDict, ValueType};
+        use crate::vars::EnvDict;
 
         let env_dict = EnvDict::new();
 
-        let rule = Rule::new("https://${MISSING_DOMAIN:default.com}/*", "https://${MISSING_TARGET:target.com}");
+        let rule = Rule::new(
+            "https://${MISSING_DOMAIN:default.com}/*",
+            "https://${MISSING_TARGET:target.com}",
+        );
         let evaluated = rule.env_eval(&env_dict);
 
         assert_eq!(evaluated.pattern(), "https://default.com/*");
         assert_eq!(evaluated.target(), "https://target.com");
-    }
-}
-
-impl EnvEvalable<Rule> for Rule {
-    fn env_eval(self, dict: &EnvDict) -> Rule {
-        Rule::new(
-            self.pattern.env_eval(dict),
-            self.target.env_eval(dict),
-        )
     }
 }

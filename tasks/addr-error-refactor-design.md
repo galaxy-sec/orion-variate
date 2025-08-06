@@ -32,17 +32,9 @@ pub enum AddrReason {
     #[error("{0}")]
     Uvs(UvsReason),
     
-    // 配置和验证错误
-    #[error("配置错误: {0}")]
-    Configuration(String),
-    
     // 网络相关错误（Git、HTTP等）
     #[error("网络错误: {0}")]
     Network(String),
-    
-    // 文件系统错误
-    #[error("文件系统错误: {0}")]
-    FileSystem(String),
     
     // 权限和认证错误
     #[error("权限错误: {0}")]
@@ -79,9 +71,7 @@ impl ErrorCode for AddrReason {
         match self {
             AddrReason::Generic(_) => 1000,
             AddrReason::Uvs(r) => r.error_code(),
-            AddrReason::Configuration(_) => 2000,
             AddrReason::Network(_) => 3000,
-            AddrReason::FileSystem(_) => 4000,
             AddrReason::Permission(_) => 5000,
             AddrReason::NotFound(_) => 6000,
         }
@@ -92,42 +82,8 @@ pub type AddrResult<T> = Result<T, StructError<AddrReason>>;
 pub type AddrError = StructError<AddrReason>;
 ```
 
-### 2. 错误上下文信息
 
-为了弥补错误类型减少带来的信息损失，使用结构化上下文：
-
-```rust
-#[derive(Debug, Clone, Serialize)]
-pub struct ErrorContext {
-    pub operation: String,
-    pub resource: Option<String>,
-    pub details: serde_json::Value,
-}
-
-impl AddrError {
-    /// 添加操作上下文
-    pub fn with_operation(mut self, operation: &str) -> Self {
-        self.context_mut().insert("operation", operation.to_string());
-        self
-    }
-    
-    /// 添加资源上下文
-    pub fn with_resource(mut self, resource: &str) -> Self {
-        self.context_mut().insert("resource", resource.to_string());
-        self
-    }
-    
-    /// 添加详细上下文
-    pub fn with_details(mut self, key: &str, value: impl Serialize) -> Self {
-        if let Ok(value) = serde_json::to_value(value) {
-            self.context_mut().insert(key, value);
-        }
-        self
-    }
-}
-```
-
-### 3. 辅助创建函数
+### 2. 辅助创建函数
 
 ```rust
 impl AddrReason {
@@ -144,11 +100,6 @@ impl AddrReason {
     /// 创建网络错误
     pub fn network_error(operation: &str, details: &str) -> Self {
         Self::Network(format!("{}: {}", operation, details))
-    }
-    
-    /// 创建文件系统错误
-    pub fn fs_error(operation: &str, path: &str, details: &str) -> Self {
-        Self::FileSystem(format!("{} {}: {}", operation, path, details))
     }
     
     /// 创建权限错误

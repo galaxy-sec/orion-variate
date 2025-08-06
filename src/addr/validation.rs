@@ -2,7 +2,7 @@
 //!
 //! 提供地址配置验证功能，确保地址格式正确且可访问
 
-use crate::addr::{constants };
+use crate::addr::constants;
 use std::path::Path;
 use url::Url;
 
@@ -36,7 +36,7 @@ impl ValidationError {
 pub trait Validate {
     /// 验证地址配置
     fn validate(&self) -> ValidationResult;
-    
+
     /// 验证地址是否可访问
     fn is_accessible(&self) -> bool;
 }
@@ -83,7 +83,7 @@ impl Validate for GitRepository {
             if !Path::new(ssh_key).exists() {
                 errors.push(ValidationError::new(
                     "ssh_key",
-                    &format!("SSH密钥文件不存在: {}", ssh_key),
+                    &format!("SSH密钥文件不存在: {ssh_key}",),
                     "SSH_KEY_NOT_FOUND",
                 ));
             }
@@ -136,15 +136,11 @@ impl Validate for HttpResource {
 
         // 验证URL格式
         if self.url().is_empty() {
-            errors.push(ValidationError::new(
-                "url",
-                "URL不能为空",
-                "EMPTY_URL",
-            ));
+            errors.push(ValidationError::new("url", "URL不能为空", "EMPTY_URL"));
         } else if let Err(e) = Url::parse(self.url()) {
             errors.push(ValidationError::new(
                 "url",
-                &format!("无效的URL格式: {}", e),
+                &format!("无效的URL格式: {e}"),
                 "INVALID_URL",
             ));
         }
@@ -185,7 +181,7 @@ impl Validate for LocalPath {
             ));
         } else {
             let path = Path::new(path_str);
-            
+
             // 检查路径是否包含非法字符
             if path_str.contains("\\") && cfg!(not(target_os = "windows")) {
                 errors.push(ValidationError::new(

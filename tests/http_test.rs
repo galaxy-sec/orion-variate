@@ -1,6 +1,8 @@
-use orion_variate::addr::{HttpResource, accessor::http::HttpAccessor};
-use orion_variate::types::ResourceDownloader;
-use orion_variate::update::UpdateOptions;
+use orion_variate::{
+    addr::{Address, HttpResource, accessor::HttpAccessor},
+    types::ResourceDownloader,
+    update::UpdateOptions,
+};
 use tempfile::tempdir;
 
 #[tokio::test]
@@ -20,11 +22,7 @@ async fn test_http_accessor_download() {
 
     // 执行下载测试
     let result = accessor
-        .download_to_local(
-            &orion_variate::addr::Address::Http(http_addr),
-            dest_dir,
-            &options,
-        )
+        .download_to_local(&Address::from(http_addr), dest_dir, &options)
         .await;
 
     // 由于网络依赖，我们主要验证代码结构是否正确
