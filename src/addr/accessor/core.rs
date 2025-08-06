@@ -52,4 +52,3 @@ impl ResourceUploader for AddrAccessor {
         }
     }
 }
-
