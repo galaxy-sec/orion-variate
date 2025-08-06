@@ -1,6 +1,6 @@
 mod rust_flow  {
   flow lint        {
-    gx.cmd ( "cargo fmt", log : "1" , out:"true"  );
+    gx.cmd ( "cargo fmt --check", log : "1" , out:"true"  );
     gx.cmd ( "cargo fix --allow-dirty", log : "1" , out:"true"  );
     gx.cmd ( "cargo clippy --all-features --all-targets  -- -D warnings");
   }
