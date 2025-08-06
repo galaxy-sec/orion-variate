@@ -5,7 +5,7 @@ use thiserror::Error;
 #[derive(Clone, Debug, Serialize, PartialEq, Error, From)]
 pub enum AddrReason {
     #[error("unknow")]
-    Brief,
+    Brief(String),
     #[error("{0}")]
     Uvs(UvsReason),
 }
@@ -13,7 +13,7 @@ pub enum AddrReason {
 impl ErrorCode for AddrReason {
     fn error_code(&self) -> i32 {
         match self {
-            AddrReason::Brief => 500,
+            AddrReason::Brief(_) => 500,
             AddrReason::Uvs(r) => r.error_code(),
         }
     }

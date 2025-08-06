@@ -2,7 +2,7 @@
 name = "orion_variate"
 authors = ["wukong<sec-wukong@outlook.com>"]
 edition = "2024"
-version = "0.5.9"
+version = "0.6.0"
 
 [dependencies]
 orion_common = { git = "https://github.com/galaxy-sec/orion-common.git", branch = "main" }
@@ -33,6 +33,7 @@ contracts = "~0.6"
 tracing = "~0.1"
 orion-error = "0.3"
 getset = "0.1.6"
+wildmatch = "~2.4"
 handlebars = "6.3"
 async-trait = "0.1"
 scopeguard = "1.2.0"
