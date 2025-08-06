@@ -151,7 +151,7 @@ mod tests {
     }
     #[test]
     fn test_gtmpl_simple() {
-        let base_dir = PathBuf::from("./test/helm/");
+        let base_dir = PathBuf::from("./tests/helm/");
         let out_dir = base_dir.join("out");
         let tpl_dir = base_dir.join("tpls");
 

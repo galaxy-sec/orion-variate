@@ -8,17 +8,18 @@
 // 运行命令：
 // cargo test --test proxy_integration_test
 
-use orion_variate::addr::GitAddr;
-use orion_variate::types::LocalUpdate;
+use orion_variate::addr::accessor::GitAccessor;
+use orion_variate::addr::{Address, GitRepository};
+use orion_variate::types::ResourceDownloader;
 use orion_variate::update::UpdateOptions;
 
 #[test]
 fn test_git_proxy() {
     // 示例1：基本代理配置
     println!("=== 示例1: 基本代理配置 ===");
-    let git_addr = GitAddr::from("https://github.com/example/repo.git").with_proxy_from_env();
-
-    match git_addr.proxy() {
+    let _git_addr = GitRepository::from("https://github.com/example/repo.git");
+    let accessor = GitAccessor::default().with_proxy_from_env();
+    match accessor.proxy() {
         Some(proxy) => {
             println!("使用代理: {}", proxy.url());
             println!("代理类型: {:?}", proxy.proxy_type());
@@ -35,12 +36,12 @@ fn test_git_proxy() {
 
     // 使用公共测试仓库
     let test_repo = "https://github.com/galaxy-sec/hello-word.git";
-    let git_addr = GitAddr::from(test_repo).with_proxy_from_env();
+    let git_addr = GitRepository::from(test_repo);
 
-    println!("测试仓库: {}", test_repo);
+    println!("测试仓库: {test_repo}");
 
     // 测试代理配置
-    match git_addr.proxy() {
+    match accessor.proxy() {
         Some(proxy) => {
             println!("使用代理: {}", proxy.url());
             println!("准备克隆到: {}", temp_dir.display());
@@ -48,8 +49,12 @@ fn test_git_proxy() {
             // 使用异步运行时执行实际的git clone操作
             let rt = tokio::runtime::Runtime::new().unwrap();
             let clone_result = rt.block_on(async {
-                git_addr
-                    .update_local(&temp_dir, &UpdateOptions::default())
+                accessor
+                    .download_to_local(
+                        &Address::from(git_addr),
+                        &temp_dir,
+                        &UpdateOptions::default(),
+                    )
                     .await
             });
 
@@ -62,7 +67,7 @@ fn test_git_proxy() {
                     println!("代理配置验证通过 - 克隆操作成功完成");
                 }
                 Err(e) => {
-                    println!("克隆失败: {}", e);
+                    println!("克隆失败: {e}");
                     // 在测试环境中，允许克隆失败，但验证代理配置被正确应用
                     println!("测试环境可能无法访问外部仓库，但代理配置已正确加载");
                 }

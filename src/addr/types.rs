@@ -1,101 +1,67 @@
-use crate::types::RemoteUpdate;
-use crate::{predule::*, update::UpdateOptions, vars::EnvDict};
-use derive_more::From;
+use crate::{predule::*, vars::EnvDict};
+use derive_more::{Display, From};
 
-use crate::{types::LocalUpdate, vars::EnvEvalable};
+use crate::vars::EnvEvalable;
 
-use super::{AddrResult, GitAddr, HttpAddr, LocalAddr};
+use super::{GitRepository, HttpResource, LocalPath};
+use std::str::FromStr;
+use thiserror::Error;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Display)]
 #[serde(untagged)]
-pub enum AddrType {
+pub enum Address {
+    #[display("git")]
     #[serde(rename = "git")]
-    Git(GitAddr),
+    Git(GitRepository),
+    #[display("http")]
     #[serde(rename = "http")]
-    Http(HttpAddr),
+    Http(HttpResource),
+    #[display("local")]
     #[serde(rename = "local")]
-    Local(LocalAddr),
+    Local(LocalPath),
 }
 
-impl EnvEvalable<AddrType> for AddrType {
-    fn env_eval(self, dict: &EnvDict) -> AddrType {
+impl EnvEvalable<Address> for Address {
+    fn env_eval(self, dict: &EnvDict) -> Address {
         match self {
-            AddrType::Git(v) => AddrType::Git(v.env_eval(dict)),
-            AddrType::Http(v) => AddrType::Http(v.env_eval(dict)),
-            AddrType::Local(v) => AddrType::Local(v.env_eval(dict)),
+            Address::Git(v) => Address::Git(v.env_eval(dict)),
+            Address::Http(v) => Address::Http(v.env_eval(dict)),
+            Address::Local(v) => Address::Local(v.env_eval(dict)),
         }
     }
 }
 
-#[async_trait]
-impl LocalUpdate for AddrType {
-    async fn update_local(&self, path: &Path, options: &UpdateOptions) -> AddrResult<UpdateUnit> {
-        let ins = self.clone().env_eval(options.values());
-        match ins {
-            AddrType::Git(addr) => addr.update_local(path, options).await,
-            AddrType::Http(addr) => addr.update_local(path, options).await,
-            AddrType::Local(addr) => addr.update_local(path, options).await,
-        }
-    }
-
-    async fn update_local_rename(
-        &self,
-        path: &Path,
-        name: &str,
-        options: &UpdateOptions,
-    ) -> AddrResult<UpdateUnit> {
-        let ins = self.clone().env_eval(options.values());
-        match ins {
-            AddrType::Git(addr) => addr.update_local_rename(path, name, options).await,
-            AddrType::Http(addr) => addr.update_local_rename(path, name, options).await,
-            AddrType::Local(addr) => addr.update_local_rename(path, name, options).await,
-        }
-    }
-}
-
-#[async_trait]
-impl RemoteUpdate for AddrType {
-    async fn update_remote(&self, path: &Path, options: &UpdateOptions) -> AddrResult<UpdateUnit> {
-        let ins = self.clone().env_eval(options.values());
-        match ins {
-            AddrType::Git(addr) => addr.update_remote(path, options).await,
-            AddrType::Http(addr) => addr.update_remote(path, options).await,
-            AddrType::Local(addr) => addr.update_remote(path, options).await,
-        }
-    }
-}
-
-impl From<GitAddr> for AddrType {
-    fn from(value: GitAddr) -> Self {
+impl From<GitRepository> for Address {
+    fn from(value: GitRepository) -> Self {
         Self::Git(value)
     }
 }
 
-impl From<HttpAddr> for AddrType {
-    fn from(value: HttpAddr) -> Self {
+impl From<HttpResource> for Address {
+    fn from(value: HttpResource) -> Self {
         Self::Http(value)
     }
 }
 
-impl From<LocalAddr> for AddrType {
-    fn from(value: LocalAddr) -> Self {
+impl From<LocalPath> for Address {
+    fn from(value: LocalPath) -> Self {
         Self::Local(value)
     }
 }
 
 #[derive(Getters, Clone, Debug, Serialize, Deserialize, From, Default)]
 #[serde(transparent)]
-pub struct EnvVarPath {
+pub struct PathTemplate {
     origin: String,
 }
-impl EnvVarPath {
+impl PathTemplate {
     pub fn path(&self, dict: &EnvDict) -> PathBuf {
         let real = self.origin.clone().env_eval(dict);
         PathBuf::from(real)
     }
 }
 
-impl From<&str> for EnvVarPath {
+impl From<&str> for PathTemplate {
     fn from(value: &str) -> Self {
         Self {
             origin: value.to_string(),
@@ -103,7 +69,7 @@ impl From<&str> for EnvVarPath {
     }
 }
 
-impl From<PathBuf> for EnvVarPath {
+impl From<PathBuf> for PathTemplate {
     fn from(value: PathBuf) -> Self {
         Self {
             origin: format!("{}", value.display()),
@@ -111,7 +77,7 @@ impl From<PathBuf> for EnvVarPath {
     }
 }
 
-impl From<&PathBuf> for EnvVarPath {
+impl From<&PathBuf> for PathTemplate {
     fn from(value: &PathBuf) -> Self {
         Self {
             origin: format!("{}", value.display()),
@@ -119,10 +85,47 @@ impl From<&PathBuf> for EnvVarPath {
     }
 }
 
-impl From<&Path> for EnvVarPath {
+impl From<&Path> for PathTemplate {
     fn from(value: &Path) -> Self {
         Self {
             origin: format!("{}", value.display()),
         }
+    }
+}
+
+/// 地址类型解析错误
+#[derive(Debug, Error)]
+pub enum AddrParseError {
+    #[error("invalid address format: {0}")]
+    InvalidFormat(String),
+}
+
+impl FromStr for Address {
+    type Err = AddrParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.trim();
+
+        if s.starts_with("git@") || s.starts_with("https://") && s.contains(".git") {
+            Ok(Address::Git(GitRepository::from(s)))
+        } else if s.starts_with("http://") || s.starts_with("https://") {
+            Ok(Address::Http(HttpResource::from(s)))
+        } else if s.starts_with("./")
+            || s.starts_with("/")
+            || s.starts_with("~")
+            || (!s.contains("://") && std::path::Path::new(s).exists())
+        {
+            Ok(Address::Local(LocalPath::from(s)))
+        } else if s.contains("github.com") || s.contains("gitlab.com") || s.contains("gitea.com") {
+            Ok(Address::Git(GitRepository::from(s)))
+        } else {
+            Err(AddrParseError::InvalidFormat(s.to_string()))
+        }
+    }
+}
+
+impl<'a> From<&'a str> for Address {
+    fn from(s: &'a str) -> Self {
+        Address::from_str(s).unwrap_or_else(|_| Address::Local(LocalPath::from(s)))
     }
 }

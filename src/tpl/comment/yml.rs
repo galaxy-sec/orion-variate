@@ -321,7 +321,7 @@ kafka_connection_rate_limit: 1000
     }
     #[test]
     fn test_file_case1() {
-        let base_path = PathBuf::from("./test/data/yml");
+        let base_path = PathBuf::from("./tests/data/yml");
         std::fs::create_dir_all(&base_path).assert();
 
         let val_file = base_path.join("values.yaml");
@@ -340,7 +340,7 @@ kafka_connection_rate_limit: 1000
                    "#;
         std::fs::write(&val_file, data).assert();
 
-        let out_file = PathBuf::from("./test/data/yml/_values.yaml");
+        let out_file = PathBuf::from("./tests/data/yml/_values.yaml");
         let yml = read_to_string(&val_file).assert();
         let codes = remove_comment(yml.as_str()).assert();
         write_all(out_file, codes.as_str()).assert();

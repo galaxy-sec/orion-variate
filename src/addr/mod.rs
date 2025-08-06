@@ -1,14 +1,17 @@
+pub mod accessor;
+pub mod constants;
 pub mod git;
 pub mod http;
 pub mod local;
 pub mod types;
+pub mod validation;
 
-pub use git::GitAddr;
-pub use http::HttpAddr;
-pub use local::LocalAddr;
-pub use local::path_file_name;
-pub use local::rename_path;
-pub use types::AddrType;
+pub use constants::*;
+pub use git::GitRepository;
+pub use http::HttpResource;
+pub use local::LocalPath;
+pub use types::Address;
+pub use validation::{Validate, ValidationError, ValidationResult};
 pub mod error;
 pub mod redirect;
 

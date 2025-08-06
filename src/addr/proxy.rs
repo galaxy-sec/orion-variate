@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use url::Url;
 
-use super::redirect::Auth;
+use crate::addr::redirect::AuthConfig;
 #[derive(Clone, Debug, PartialEq)]
 pub enum ProxyType {
     Http,
@@ -17,7 +17,7 @@ pub struct ProxyConfig {
     url: Url,
     /// 代理类型（可选，默认根据 URL 自动推断）
     proxy_type: Option<ProxyType>,
-    auth: Option<Auth>,
+    auth: Option<AuthConfig>,
 }
 
 impl ProxyConfig {
@@ -52,7 +52,7 @@ impl ProxyConfig {
         let password = url.password().map(|p| p.to_string());
 
         // 若 URL 中已包含认证信息，直接使用
-        let auth = password.map(|password| Auth::new(username, password));
+        let auth = password.map(|password| AuthConfig::new(username, password));
 
         Some(Self {
             url,
