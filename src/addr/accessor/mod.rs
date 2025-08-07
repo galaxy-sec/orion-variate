@@ -8,5 +8,6 @@ pub use http::HttpAccessor;
 pub use local::LocalAccessor;
 pub use local::rename_path;
 mod universal;
+pub use local::path_file_name;
 pub use universal::UniversalAccessor;
 pub use universal::UniversalConfig;
