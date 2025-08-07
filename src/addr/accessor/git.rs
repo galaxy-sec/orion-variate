@@ -456,6 +456,7 @@ impl GitAccessor {
         let mut builder = RepoBuilder::new();
         builder.fetch_options(fetch_options);
 
+        println!("clone repo from {}", repo_addr.repo());
         // 执行克隆
         let repo = builder.clone(repo_addr.repo(), target_dir)?;
 
