@@ -1,4 +1,5 @@
 use crate::vars::{ValueDict, ValueType};
+use std::str::FromStr;
 
 /// HTTP methods supported for upload operations
 #[derive(Debug, Clone, PartialEq, derive_more::Display)]
@@ -17,6 +18,40 @@ pub enum HttpMethod {
 impl Default for HttpMethod {
     fn default() -> Self {
         Self::Put
+    }
+}
+
+/// 转换错误类型
+#[derive(Debug, thiserror::Error)]
+#[error("无效的HTTP方法: {0}")]
+pub struct ParseHttpMethodError(String);
+
+impl FromStr for HttpMethod {
+    type Err = ParseHttpMethodError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_uppercase().as_str() {
+            "PUT" => Ok(HttpMethod::Put),
+            "POST" => Ok(HttpMethod::Post),
+            "PATCH" => Ok(HttpMethod::Patch),
+            _ => Err(ParseHttpMethodError(s.to_string())),
+        }
+    }
+}
+
+impl TryFrom<&str> for HttpMethod {
+    type Error = ParseHttpMethodError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        HttpMethod::from_str(value)
+    }
+}
+
+impl TryFrom<String> for HttpMethod {
+    type Error = ParseHttpMethodError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        HttpMethod::from_str(&value)
     }
 }
 
@@ -88,6 +123,78 @@ impl UploadOptions {
             compression: false,
             metadata: ValueDict::default(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn test_from_str_valid_cases() {
+        assert_eq!(HttpMethod::from_str("PUT").unwrap(), HttpMethod::Put);
+        assert_eq!(HttpMethod::from_str("put").unwrap(), HttpMethod::Put);
+        assert_eq!(HttpMethod::from_str("Put").unwrap(), HttpMethod::Put);
+
+        assert_eq!(HttpMethod::from_str("POST").unwrap(), HttpMethod::Post);
+        assert_eq!(HttpMethod::from_str("post").unwrap(), HttpMethod::Post);
+        assert_eq!(HttpMethod::from_str("Post").unwrap(), HttpMethod::Post);
+
+        assert_eq!(HttpMethod::from_str("PATCH").unwrap(), HttpMethod::Patch);
+        assert_eq!(HttpMethod::from_str("patch").unwrap(), HttpMethod::Patch);
+        assert_eq!(HttpMethod::from_str("Patch").unwrap(), HttpMethod::Patch);
+    }
+
+    #[test]
+    fn test_from_str_invalid_cases() {
+        assert!(HttpMethod::from_str("GET").is_err());
+        assert!(HttpMethod::from_str("DELETE").is_err());
+        assert!(HttpMethod::from_str("INVALID").is_err());
+        assert!(HttpMethod::from_str("").is_err());
+        assert!(HttpMethod::from_str("  PUT  ").is_err()); // 包含空格
+    }
+
+    #[test]
+    fn test_try_from_str() {
+        assert_eq!(HttpMethod::try_from("PUT").unwrap(), HttpMethod::Put);
+        assert_eq!(HttpMethod::try_from("Post").unwrap(), HttpMethod::Post);
+        assert_eq!(HttpMethod::try_from("patch").unwrap(), HttpMethod::Patch);
+    }
+
+    #[test]
+    fn test_try_from_string() {
+        assert_eq!(
+            HttpMethod::try_from(String::from("PUT")).unwrap(),
+            HttpMethod::Put
+        );
+        assert_eq!(
+            HttpMethod::try_from(String::from("POST")).unwrap(),
+            HttpMethod::Post
+        );
+        assert_eq!(
+            HttpMethod::try_from(String::from("PATCH")).unwrap(),
+            HttpMethod::Patch
+        );
+
+        assert!(HttpMethod::try_from(String::from("DELETE")).is_err());
+        assert!(HttpMethod::try_from(String::from("")).is_err());
+    }
+
+    #[test]
+    fn test_parse_http_method_error() {
+        let err = HttpMethod::from_str("INVALID").unwrap_err();
+        assert_eq!(err.to_string(), "无效的HTTP方法: INVALID");
+
+        let err = HttpMethod::from_str("").unwrap_err();
+        assert_eq!(err.to_string(), "无效的HTTP方法: ");
+    }
+
+    #[test]
+    fn test_http_method_display() {
+        assert_eq!(HttpMethod::Put.to_string(), "PUT");
+        assert_eq!(HttpMethod::Post.to_string(), "POST");
+        assert_eq!(HttpMethod::Patch.to_string(), "PATCH");
     }
 }
 
