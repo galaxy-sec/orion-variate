@@ -11,7 +11,7 @@ use crate::{
 use getset::{Getters, WithSetters};
 use orion_error::{ToStructError, UvsResFrom};
 use tokio::io::AsyncWriteExt;
-use tracing::info;
+use tracing::{debug, info, instrument};
 
 use crate::types::ResourceUploader;
 
@@ -23,6 +23,15 @@ pub struct HttpAccessor {
 }
 
 impl HttpAccessor {
+    #[instrument(
+        target = "orion_variate::addr::http",
+        skip(self, file_path),
+        fields(
+            file_path = %file_path.as_ref().display(),
+            url = %addr.url(),
+            method = ?method,
+        ),
+    )]
     pub async fn upload<P: AsRef<Path>>(
         &self,
         addr: &HttpResource,
@@ -41,14 +50,20 @@ impl HttpAccessor {
         let file_name = filename_of_url(addr.url()).unwrap_or_else(|| "file.bin".to_string());
         ctx.with_path("local file", file_path.as_ref());
 
-        println!(
-            "upload : {} => \n {}",
-            file_path.as_ref().display(),
-            addr.url(),
+        info!(
+            target: "orion_variate::addr::http",
+            file_path = %file_path.as_ref().display(),
+            url = %addr.url(),
+            method = ?method,
+            file_name = file_name,
+            "upload started"
         );
         let file_content = std::fs::read(file_path).owe_data().with(&ctx)?;
-        // 记录本地文件大小
-        println!("本地文件大小: {} 字节", file_content.len());
+        debug!(
+            target: "orion_variate::addr::http",
+            file_size = file_content.len(),
+            "local file read"
+        );
         // 创建进度条
         let content_len = file_content.len() as u64;
         let pb = ProgressBar::new(content_len);
@@ -79,12 +94,27 @@ impl HttpAccessor {
             request = request.basic_auth(u, Some(p));
         }
 
+        debug!(
+            target: "orion_variate::addr::http",
+            url = %addr.url(),
+            "sending http download request"
+        );
         let response = request.send().await.owe_res().with(&ctx)?;
         response.error_for_status().owe_res().with(&ctx)?;
         pb.finish_with_message("上传完成");
+        info!("upload completed");
         Ok(())
     }
 
+    #[instrument(
+        target = "orion_variate::addr::http",
+        skip(self, dest_path),
+        fields(
+            url = %addr.url(),
+            dest_path = %dest_path.display(),
+            cache_reuse = options.reuse_cache(),
+        ),
+    )]
     pub async fn download(
         &self,
         addr: &HttpResource,
@@ -99,7 +129,11 @@ impl HttpAccessor {
         };
 
         if dest_path.exists() && options.reuse_cache() {
-            info!(target :"spec/addr", "{} exists , ignore!! ",dest_path.display());
+            info!(
+                target: "orion_variate::addr::http",
+                path = %dest_path.display(),
+                "file already exists, skipping download due to reuse_cache"
+            );
             return Ok(dest_path.to_path_buf());
         }
         if dest_path.exists() {
@@ -114,6 +148,7 @@ impl HttpAccessor {
             request = request.basic_auth(u, Some(p));
         }
 
+        println!("downlaod from :{}", addr.url());
         let mut response = request.send().await.owe_res().with(&ctx)?;
 
         if !response.status().is_success() {
@@ -140,6 +175,12 @@ impl HttpAccessor {
 
         let mut downloaded: u64 = 0;
 
+        debug!(
+            target: "orion_variate::addr::http",
+            url = %addr.url(),
+            total_size = total_size,
+            "starting download stream"
+        );
         while let Some(chunk) = response.chunk().await.owe_data().with(&ctx)? {
             file.write_all(&chunk).await.owe_sys().with(&ctx)?;
 
@@ -148,12 +189,25 @@ impl HttpAccessor {
         }
 
         pb.finish_with_message("下载完成");
+        debug!(
+            target: "orion_variate::addr::http",
+            path = %dest_path.display(),
+            "download completed"
+        );
         Ok(dest_path.to_path_buf())
     }
 }
 
 #[async_trait]
 impl ResourceDownloader for HttpAccessor {
+    #[instrument(
+        target = "orion_variate::addr::http",
+        skip(self, dest_dir, options),
+        fields(
+            addr = %addr,
+            dest_dir = %dest_dir.display(),
+        ),
+    )]
     async fn download_to_local(
         &self,
         addr: &Address,
@@ -162,10 +216,14 @@ impl ResourceDownloader for HttpAccessor {
     ) -> AddrResult<UpdateUnit> {
         match addr {
             Address::Http(http) => {
-                let file = filename_of_url(http.url());
-                let dest_path = dest_dir.join(file.unwrap_or("file.tmp".into()));
+                let target_path = if dest_dir.is_dir() {
+                    let file = filename_of_url(http.url());
+                    &dest_dir.join(file.unwrap_or("file.tmp".into()))
+                } else {
+                    dest_dir
+                };
                 Ok(UpdateUnit::from(
-                    self.download(http, &dest_path, options).await?,
+                    self.download(http, target_path, options).await?,
                 ))
             }
             _ => Err(AddrReason::Brief(format!("addr type error {addr}")).to_err()),
@@ -175,6 +233,14 @@ impl ResourceDownloader for HttpAccessor {
 
 #[async_trait]
 impl ResourceUploader for HttpAccessor {
+    #[instrument(
+        target = "orion_variate::addr::http",
+        skip(self, path, options),
+        fields(
+            addr = %addr,
+            path = %path.display(),
+        ),
+    )]
     async fn upload_from_local(
         &self,
         addr: &Address,
