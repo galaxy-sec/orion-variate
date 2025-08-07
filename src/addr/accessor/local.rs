@@ -278,8 +278,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_from_local() -> AddrResult<()> {
-        let target = tempdir().assert();
-        let target_dir = target.path();
+        //let target = tempdir().assert();
+        //let target_dir = target.path();
         let source = tempdir().assert();
         let source_dir = source.path();
 
