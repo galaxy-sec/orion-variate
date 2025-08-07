@@ -5,7 +5,7 @@ use crate::{
     },
     predule::*,
     types::ResourceDownloader,
-    update::UpdateOptions,
+    update::{DownloadOptions, HttpMethod, UploadOptions},
 };
 
 use getset::{Getters, WithSetters};
@@ -27,7 +27,7 @@ impl HttpAccessor {
         &self,
         addr: &HttpResource,
         file_path: P,
-        method: &str,
+        method: &HttpMethod, //method: &str,
     ) -> AddrResult<()> {
         use indicatif::{ProgressBar, ProgressStyle};
         let mut ctx = WithContext::want("upload url");
@@ -57,14 +57,14 @@ impl HttpAccessor {
             .progress_chars("#>-"));
 
         ctx.with("url", addr.url());
-        let mut request = match method.to_uppercase().as_str() {
-            "POST" => {
+        let mut request = match method {
+            HttpMethod::Post => {
                 let part = reqwest::multipart::Part::stream_with_length(file_content, content_len)
                     .file_name(file_name);
                 let form = reqwest::multipart::Form::new().part("file", part);
                 client.post(addr.url()).multipart(form)
             }
-            "PUT" => {
+            HttpMethod::Put => {
                 // PUT方法直接使用文件内容作为请求体，避免multipart额外头部
                 client.put(addr.url()).body(file_content)
             }
@@ -89,7 +89,7 @@ impl HttpAccessor {
         &self,
         addr: &HttpResource,
         dest_path: &Path,
-        options: &UpdateOptions,
+        options: &DownloadOptions,
     ) -> AddrResult<PathBuf> {
         use indicatif::{ProgressBar, ProgressStyle};
         let addr = if let Some(direct_serv) = &self.redirect {
@@ -158,7 +158,7 @@ impl ResourceDownloader for HttpAccessor {
         &self,
         addr: &Address,
         dest_dir: &Path,
-        options: &UpdateOptions,
+        options: &DownloadOptions,
     ) -> AddrResult<UpdateUnit> {
         match addr {
             Address::Http(http) => {
@@ -179,14 +179,16 @@ impl ResourceUploader for HttpAccessor {
         &self,
         addr: &Address,
         path: &Path,
-        _: &UpdateOptions,
+        options: &UploadOptions,
     ) -> AddrResult<UpdateUnit> {
+        let _ = options; // Suppress unused variable warning for now
         if !path.exists() {
             return Err(StructError::from_res("path not exist".into()));
         }
         match addr {
             Address::Http(http) => {
-                self.upload(http, path, "POST").await?;
+                //TODO: use options.http_method
+                self.upload(http, path, options.http_method()).await?;
                 if path.is_file() {
                     std::fs::remove_file(path).owe_res()?;
                 } else {
@@ -207,7 +209,7 @@ mod tests {
             redirect::{AuthConfig, Rule},
         },
         tools::test_init,
-        update::UpdateOptions,
+        update::DownloadOptions,
     };
 
     use super::*;
@@ -244,7 +246,7 @@ mod tests {
             .download_to_local(
                 &Address::from(http_addr),
                 &temp_dir,
-                &UpdateOptions::for_test(),
+                &DownloadOptions::for_test(),
             )
             .await?;
 
@@ -288,7 +290,7 @@ mod tests {
             .download_to_local(
                 &Address::from(http_addr),
                 &temp_dir,
-                &UpdateOptions::for_test(),
+                &DownloadOptions::for_test(),
             )
             .await?;
 
@@ -310,7 +312,7 @@ mod tests {
                 );
         let http_accessor = HttpAccessor::default();
         http_accessor
-            .download_to_local(&Address::from(addr), &path, &UpdateOptions::for_test())
+            .download_to_local(&Address::from(addr), &path, &DownloadOptions::for_test())
             .await?;
         Ok(())
     }
@@ -342,7 +344,9 @@ mod tests {
         );
         let http_accessor = HttpAccessor::default();
 
-        http_accessor.upload(&http_addr, &file_path, "POST").await?;
+        http_accessor
+            .upload(&http_addr, &file_path, &HttpMethod::Post)
+            .await?;
 
         // 4. 验证结果
         mock.assert();
@@ -374,7 +378,9 @@ mod tests {
         );
         let http_accessor = HttpAccessor::default();
 
-        http_accessor.upload(&http_addr, &file_path, "PUT").await?;
+        http_accessor
+            .upload(&http_addr, &file_path, &HttpMethod::Put)
+            .await?;
 
         // 4. 验证结果
         mock.assert();
@@ -418,7 +424,7 @@ mod test3 {
             .upload_from_local(
                 &Address::from(http_addr),
                 &file_path,
-                &UpdateOptions::for_test(),
+                &UploadOptions::new().method(HttpMethod::Post),
             )
             .await?;
 

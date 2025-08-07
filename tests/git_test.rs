@@ -11,7 +11,7 @@
 use orion_variate::addr::accessor::GitAccessor;
 use orion_variate::addr::{Address, GitRepository};
 use orion_variate::types::ResourceDownloader;
-use orion_variate::update::UpdateOptions;
+use orion_variate::update::DownloadOptions;
 
 #[test]
 fn test_git_proxy() {
@@ -53,7 +53,7 @@ fn test_git_proxy() {
                     .download_to_local(
                         &Address::from(git_addr),
                         &temp_dir,
-                        &UpdateOptions::default(),
+                        &DownloadOptions::default(),
                     )
                     .await
             });

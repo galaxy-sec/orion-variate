@@ -3,7 +3,7 @@ use crate::addr::Address;
 use crate::addr::accessor::AddrAccessor;
 use crate::predule::*;
 use crate::types::ResourceDownloader;
-use crate::update::UpdateOptions;
+use crate::update::DownloadOptions;
 use getset::Getters;
 use getset::Setters;
 use getset::WithSetters;
@@ -47,7 +47,7 @@ impl Artifact {
         &self,
         accessor: &AddrAccessor,
         dest_path: &Path,
-        options: &UpdateOptions,
+        options: &DownloadOptions,
     ) -> AddrResult<UpdateUnit> {
         std::fs::create_dir_all(dest_path).owe_res()?;
         let result = accessor
@@ -93,7 +93,7 @@ mod tests {
             .join("v1");
         let x = GitAccessor::default();
         artifact
-            .deploy_repo_to_local(&x.into(), &path, &UpdateOptions::default())
+            .deploy_repo_to_local(&x.into(), &path, &DownloadOptions::default())
             .await?;
 
         assert!(path.join("hello-word").exists());

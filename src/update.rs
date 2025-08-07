@@ -2,6 +2,9 @@ use derive_more::From;
 
 use crate::vars::ValueDict;
 
+mod upload_options;
+pub use upload_options::*;
+
 //use super::predule::*;
 /// Defines the duration for which updates are kept or applied.
 ///
@@ -24,7 +27,7 @@ pub enum UpdateScope {
     RemoteCache,
 }
 
-impl From<(usize, ValueDict)> for UpdateOptions {
+impl From<(usize, ValueDict)> for DownloadOptions {
     fn from(value: (usize, ValueDict)) -> Self {
         match value.0 {
             0 => Self::new(UpdateScope::None, value.1),
@@ -35,11 +38,11 @@ impl From<(usize, ValueDict)> for UpdateOptions {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct UpdateOptions {
+pub struct DownloadOptions {
     scope_level: UpdateScope,
     values: ValueDict,
 }
-impl UpdateOptions {
+impl DownloadOptions {
     pub fn new(scope_level: UpdateScope, values: ValueDict) -> Self {
         Self {
             scope_level,

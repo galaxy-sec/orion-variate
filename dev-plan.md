@@ -28,3 +28,8 @@
 [x]添加配置验证方法
 []添加详细的日志记录
 []重构错误类型，增加具体错误分类,需要先设计出方案，确认后再行动
+
+### ResourceUploader的upload_from_local，使用DownloadOptions 不合理，应设计出 UploadOptions
+
+[ ] 进行方案设计，放置到tasks 下
+[ ] 执行方案修改任务

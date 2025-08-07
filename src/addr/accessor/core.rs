@@ -3,7 +3,7 @@ use derive_more::From;
 
 use crate::addr::{AddrResult, Address};
 use crate::types::{ResourceDownloader, ResourceUploader, UpdateUnit};
-use crate::update::UpdateOptions;
+use crate::update::{DownloadOptions, UploadOptions};
 use std::path::Path;
 
 use super::git::GitAccessor;
@@ -27,7 +27,7 @@ impl ResourceDownloader for AddrAccessor {
         &self,
         addr: &Address,
         path: &Path,
-        up_options: &UpdateOptions,
+        up_options: &DownloadOptions,
     ) -> AddrResult<UpdateUnit> {
         match self {
             AddrAccessor::Git(o) => o.download_to_local(addr, path, up_options).await,
@@ -43,7 +43,7 @@ impl ResourceUploader for AddrAccessor {
         &self,
         addr: &Address,
         path: &Path,
-        options: &UpdateOptions,
+        options: &UploadOptions,
     ) -> AddrResult<UpdateUnit> {
         match self {
             AddrAccessor::Git(o) => o.upload_from_local(addr, path, options).await,

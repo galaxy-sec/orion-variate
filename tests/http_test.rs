@@ -1,7 +1,7 @@
 use orion_variate::{
     addr::{Address, HttpResource, accessor::HttpAccessor},
     types::ResourceDownloader,
-    update::UpdateOptions,
+    update::DownloadOptions,
 };
 use tempfile::tempdir;
 
@@ -18,7 +18,7 @@ async fn test_http_accessor_download() {
     let http_addr = HttpResource::from("https://httpbin.org/robots.txt");
 
     // 创建UpdateOptions
-    let options = UpdateOptions::default();
+    let options = DownloadOptions::default();
 
     // 执行下载测试
     let result = accessor

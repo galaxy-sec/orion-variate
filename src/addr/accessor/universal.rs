@@ -1,11 +1,11 @@
 use crate::addr::redirect::serv::RedirectService;
 use crate::addr::{AddrResult, Address};
 use crate::types::{ResourceDownloader, ResourceUploader, UpdateUnit};
-use crate::update::UpdateOptions;
+use crate::update::{DownloadOptions, UploadOptions};
 use async_trait::async_trait;
 use log::error;
 use orion_common::serde::Yamlable;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::git::GitAccessor;
 use super::http::HttpAccessor;
@@ -33,6 +33,12 @@ impl UniversalConfig {
                     error!("load redirect conf failed!\npath:{} \n{e}", path.display());
                 }
             }
+        }
+        self
+    }
+    pub fn with_redirect_file_opt(self, path_opt: &Option<PathBuf>) -> Self {
+        if let Some(path) = path_opt {
+            return self.with_redirect_file(path.as_path());
         }
         self
     }
@@ -83,7 +89,7 @@ impl ResourceDownloader for UniversalAccessor {
         &self,
         addr: &Address,
         path: &Path,
-        options: &UpdateOptions,
+        options: &DownloadOptions,
     ) -> AddrResult<UpdateUnit> {
         match addr {
             Address::Git(_) => self.git.download_to_local(addr, path, options).await,
@@ -99,7 +105,7 @@ impl ResourceUploader for UniversalAccessor {
         &self,
         addr: &Address,
         path: &Path,
-        options: &UpdateOptions,
+        options: &UploadOptions,
     ) -> AddrResult<UpdateUnit> {
         match addr {
             Address::Git(_) => self.git.upload_from_local(addr, path, options).await,
@@ -145,7 +151,7 @@ mod tests {
             .download_to_local(
                 &git_addr,
                 &PathBuf::from("./tmp/"),
-                &UpdateOptions::default(),
+                &DownloadOptions::default(),
             )
             .await
             .assert();

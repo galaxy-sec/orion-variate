@@ -1,11 +1,12 @@
 use crate::addr::proxy::ProxyConfig;
 use crate::addr::redirect::serv::RedirectService;
 use crate::addr::{AddrReason, AddrResult, Address, GitRepository};
+use crate::update::UploadOptions;
 use crate::{
     predule::*,
     tools::get_repo_name,
     types::{ResourceDownloader, ResourceUploader},
-    update::UpdateOptions,
+    update::DownloadOptions,
 };
 use async_trait::async_trait;
 use fs_extra::dir::CopyOptions;
@@ -280,7 +281,7 @@ impl ResourceDownloader for GitAccessor {
         &self,
         addr: &Address,
         path: &Path,
-        options: &UpdateOptions,
+        options: &DownloadOptions,
     ) -> AddrResult<UpdateUnit> {
         let addr = match addr {
             Address::Git(x) => x,
@@ -363,7 +364,7 @@ impl ResourceUploader for GitAccessor {
         &self,
         addr: &Address,
         path: &Path,
-        options: &UpdateOptions,
+        _options: &UploadOptions,
     ) -> AddrResult<UpdateUnit> {
         let ctx = WithContext::want("upload to repository");
         if !path.exists() {
@@ -372,7 +373,9 @@ impl ResourceUploader for GitAccessor {
         let temp_path = home_dir().unwrap_or(PathBuf::from("~/")).join(".temp");
         ensure_path(&temp_path).owe_logic()?;
 
-        let target_repo = self.download_to_local(addr, &temp_path, options).await?;
+        let target_repo = self
+            .download_to_local(addr, &temp_path, &DownloadOptions::default())
+            .await?;
 
         let addr = match addr {
             Address::Git(x) => x,
@@ -698,7 +701,7 @@ mod tests {
             .download_to_local(
                 &Address::from(git_addr),
                 &dest_path,
-                &UpdateOptions::default(),
+                &DownloadOptions::default(),
             )
             .await?;
 
@@ -733,7 +736,7 @@ mod tests {
         let addr_type = Address::Git(git_addr.clone());
         let accessor = GitAccessor::default();
         let git_up = accessor
-            .download_to_local(&addr_type, &dest_path, &UpdateOptions::default())
+            .download_to_local(&addr_type, &dest_path, &DownloadOptions::default())
             .await
             .assert();
         assert_eq!(git_up.position(), &dest_path.join("x86"));
@@ -758,7 +761,7 @@ mod tests {
             .download_to_local(
                 &Address::from(git_addr),
                 &dest_path,
-                &UpdateOptions::default(),
+                &DownloadOptions::default(),
             )
             .await
             .assert();
@@ -795,7 +798,7 @@ mod tests {
             .download_to_local(
                 &Address::from(git_addr),
                 &dest_path,
-                &UpdateOptions::default(),
+                &DownloadOptions::default(),
             )
             .await
             .assert();
@@ -818,7 +821,7 @@ mod tests {
         let addr_type = Address::Git(git_addr.clone());
         let accessor = GitAccessor::default();
         let git_up = accessor
-            .download_to_local(&addr_type, &dest_path, &UpdateOptions::default())
+            .download_to_local(&addr_type, &dest_path, &DownloadOptions::default())
             .await?;
         let repo = git2::Repository::open(git_up.position().clone()).assert();
         let head = repo.head().assert();
@@ -827,7 +830,7 @@ mod tests {
     }
 
     use crate::types::{ResourceDownloader, ResourceUploader};
-    use crate::{addr::GitRepository, update::UpdateOptions};
+    use crate::{addr::GitRepository, update::DownloadOptions};
 
     #[ignore = "no run in ci"]
     #[tokio::test]
@@ -844,7 +847,7 @@ mod tests {
         let addr_type = Address::Git(git_addr.clone());
         let accessor = GitAccessor::default();
         let git_up = accessor
-            .upload_from_local(&addr_type, &dir, &UpdateOptions::default())
+            .upload_from_local(&addr_type, &dir, &UploadOptions::new())
             .await?;
         println!("{:?}", git_up.position);
         Ok(())
@@ -864,7 +867,7 @@ mod tests {
         let addr_type = Address::Git(git_addr.clone());
         let accessor = GitAccessor::default();
         let git_up = accessor
-            .upload_from_local(&addr_type, &file, &UpdateOptions::default())
+            .upload_from_local(&addr_type, &file, &UploadOptions::new())
             .await?;
         println!("{:?}", git_up.position);
         Ok(())
@@ -917,7 +920,7 @@ mod tests {
         // 执行克隆
         let addr_type = Address::Git(git_addr.clone());
         let git_up = GitAccessor::default()
-            .download_to_local(&addr_type, &dest_path, &UpdateOptions::default())
+            .download_to_local(&addr_type, &dest_path, &DownloadOptions::default())
             .await?;
 
         // 验证克隆结果
@@ -954,7 +957,7 @@ mod tests {
             .download_to_local(
                 &Address::from(git_addr),
                 &dest_path,
-                &UpdateOptions::default(),
+                &DownloadOptions::default(),
             )
             .await?;
 

@@ -4,7 +4,7 @@ use async_trait::async_trait;
 
 use crate::{
     addr::{AddrResult, Address, accessor::rename_path},
-    update::UpdateOptions,
+    update::{DownloadOptions, UploadOptions},
     vars::VarCollection,
 };
 use getset::{CloneGetters, CopyGetters, Getters, MutGetters, Setters, WithSetters};
@@ -41,7 +41,7 @@ pub trait ResourceUploader {
         &self,
         source: &Address,
         dest: &Path,
-        options: &UpdateOptions,
+        options: &UploadOptions,
     ) -> AddrResult<UpdateUnit>;
 }
 #[async_trait]
@@ -50,14 +50,14 @@ pub trait ResourceDownloader {
         &self,
         source: &Address,
         dest: &Path,
-        options: &UpdateOptions,
+        options: &DownloadOptions,
     ) -> AddrResult<UpdateUnit>;
     async fn download_rename(
         &self,
         addr: &Address,
         path: &Path,
         name: &str,
-        options: &UpdateOptions,
+        options: &DownloadOptions,
     ) -> AddrResult<UpdateUnit> {
         let mut target = self.download_to_local(addr, path, options).await?;
         let path = rename_path(target.position(), name)?;
