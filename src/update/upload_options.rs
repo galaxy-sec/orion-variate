@@ -126,6 +126,29 @@ impl UploadOptions {
     }
 }
 
+impl From<(usize, ValueDict)> for UploadOptions {
+    fn from((method, values): (usize, ValueDict)) -> Self {
+        let http_method = match method {
+            0 => HttpMethod::Put,
+            1 => HttpMethod::Post,
+            2 => HttpMethod::Patch,
+            _ => HttpMethod::Put,
+        };
+
+        Self {
+            http_method,
+            compression: false,
+            metadata: values,
+        }
+    }
+}
+
+impl From<crate::update::DownloadOptions> for UploadOptions {
+    fn from(_: crate::update::DownloadOptions) -> Self {
+        Self::default()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -195,28 +218,5 @@ mod tests {
         assert_eq!(HttpMethod::Put.to_string(), "PUT");
         assert_eq!(HttpMethod::Post.to_string(), "POST");
         assert_eq!(HttpMethod::Patch.to_string(), "PATCH");
-    }
-}
-
-impl From<(usize, ValueDict)> for UploadOptions {
-    fn from((method, values): (usize, ValueDict)) -> Self {
-        let http_method = match method {
-            0 => HttpMethod::Put,
-            1 => HttpMethod::Post,
-            2 => HttpMethod::Patch,
-            _ => HttpMethod::Put,
-        };
-
-        Self {
-            http_method,
-            compression: false,
-            metadata: values,
-        }
-    }
-}
-
-impl From<crate::update::DownloadOptions> for UploadOptions {
-    fn from(_: crate::update::DownloadOptions) -> Self {
-        Self::default()
     }
 }
