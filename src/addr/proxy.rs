@@ -62,12 +62,33 @@ impl ProxyConfig {
     }
 }
 
-pub fn create_http_client() -> reqwest::Client {
-    let mut client_builder = ClientBuilder::new()
-        .timeout(Duration::from_secs(30))
+/// 创建带自定义超时配置的HTTP客户端
+pub fn create_http_client_with_timeouts(
+    connect_timeout: Duration,
+    read_timeout: Duration,
+    total_timeout: Duration,
+) -> reqwest::Client {
+    let client_builder = ClientBuilder::new()
+        .connect_timeout(connect_timeout)
+        .read_timeout(read_timeout)
+        .timeout(total_timeout)
         .tcp_keepalive(Duration::from_secs(60))
         .pool_idle_timeout(Duration::from_secs(90));
 
+    create_client_with_common_settings(client_builder)
+}
+
+/// 创建默认HTTP客户端（保持向后兼容）
+pub fn create_http_client() -> reqwest::Client {
+    create_http_client_with_timeouts(
+        Duration::from_secs(30),
+        Duration::from_secs(30),
+        Duration::from_secs(30),
+    )
+}
+
+/// 构建客户端的共同配置
+fn create_client_with_common_settings(mut client_builder: ClientBuilder) -> reqwest::Client {
     // 添加代理支持
     if let Ok(proxy_url) = std::env::var("https_proxy")
         .or_else(|_| std::env::var("HTTPS_PROXY"))

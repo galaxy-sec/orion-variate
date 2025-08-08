@@ -1,12 +1,15 @@
 use crate::{
     addr::{
-        AddrReason, AddrResult, Address, HttpResource, http::filename_of_url,
-        proxy::create_http_client, redirect::serv::RedirectService,
+        AddrReason, AddrResult, Address, HttpResource,
+        http::filename_of_url,
+        proxy::{create_http_client, create_http_client_with_timeouts},
+        redirect::serv::RedirectService,
     },
     predule::*,
     types::ResourceDownloader,
     update::{DownloadOptions, HttpMethod, UploadOptions},
 };
+use std::time::Duration;
 
 use getset::{Getters, WithSetters};
 use orion_error::{ToStructError, UvsResFrom};
@@ -141,8 +144,11 @@ impl HttpAccessor {
         }
         let mut ctx = WithContext::want("download url");
         ctx.with("url", addr.url());
-        //let client = reqwest::Client::new();
-        let client = create_http_client();
+        let connect_timeout = Duration::from_secs(options.connect_timeout(30));
+        let read_timeout = Duration::from_secs(options.read_timeout(60));
+        let total_timeout = Duration::from_secs(options.total_timeout(300));
+
+        let client = create_http_client_with_timeouts(connect_timeout, read_timeout, total_timeout);
         let mut request = client.get(addr.url());
         if let (Some(u), Some(p)) = (addr.username(), addr.password()) {
             request = request.basic_auth(u, Some(p));
