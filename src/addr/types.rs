@@ -7,7 +7,7 @@ use super::{GitRepository, HttpResource, LocalPath};
 use std::str::FromStr;
 use thiserror::Error;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Display)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Display, From)]
 #[serde(untagged)]
 pub enum Address {
     #[display("git")]
@@ -28,24 +28,6 @@ impl EnvEvalable<Address> for Address {
             Address::Http(v) => Address::Http(v.env_eval(dict)),
             Address::Local(v) => Address::Local(v.env_eval(dict)),
         }
-    }
-}
-
-impl From<GitRepository> for Address {
-    fn from(value: GitRepository) -> Self {
-        Self::Git(value)
-    }
-}
-
-impl From<HttpResource> for Address {
-    fn from(value: HttpResource) -> Self {
-        Self::Http(value)
-    }
-}
-
-impl From<LocalPath> for Address {
-    fn from(value: LocalPath) -> Self {
-        Self::Local(value)
     }
 }
 
