@@ -1,15 +1,15 @@
 use crate::{
     addr::{
         AddrReason, AddrResult, Address, HttpResource,
+        access_ctrl::serv::NetAccessCtrl,
+        accessor::creator::{create_http_client, create_http_client_with_timeouts},
         http::filename_of_url,
-        proxy::{create_http_client, create_http_client_with_timeouts},
-        redirect::serv::RedirectService,
     },
     predule::*,
+    timeout::TimeoutConfig,
     types::ResourceDownloader,
     update::{DownloadOptions, HttpMethod, UploadOptions},
 };
-use std::time::Duration;
 
 use getset::{Getters, WithSetters};
 use orion_error::{ToStructError, UvsResFrom};
@@ -22,7 +22,7 @@ use crate::types::ResourceUploader;
 #[getset(get = "pub")]
 pub struct HttpAccessor {
     #[getset(set_with = "pub")]
-    redirect: Option<RedirectService>,
+    ctrl: Option<NetAccessCtrl>,
 }
 
 impl HttpAccessor {
@@ -43,7 +43,7 @@ impl HttpAccessor {
     ) -> AddrResult<()> {
         use indicatif::{ProgressBar, ProgressStyle};
         let mut ctx = WithContext::want("upload url");
-        let addr = if let Some(direct_serv) = &self.redirect {
+        let addr = if let Some(direct_serv) = &self.ctrl {
             direct_serv.direct_http_addr(addr.clone())
         } else {
             addr.clone()
@@ -125,7 +125,7 @@ impl HttpAccessor {
         options: &DownloadOptions,
     ) -> AddrResult<PathBuf> {
         use indicatif::{ProgressBar, ProgressStyle};
-        let addr = if let Some(direct_serv) = &self.redirect {
+        let addr = if let Some(direct_serv) = &self.ctrl {
             direct_serv.direct_http_addr(addr.clone())
         } else {
             addr.clone()
@@ -144,11 +144,18 @@ impl HttpAccessor {
         }
         let mut ctx = WithContext::want("download url");
         ctx.with("url", addr.url());
-        let connect_timeout = Duration::from_secs(options.connect_timeout(30));
-        let read_timeout = Duration::from_secs(options.read_timeout(60));
-        let total_timeout = Duration::from_secs(options.total_timeout(300));
+        let timeout_config = self
+            .ctrl
+            .as_ref()
+            .map(|x| x.timeout_http(&addr))
+            .flatten()
+            .unwrap_or(TimeoutConfig::http_simple());
 
-        let client = create_http_client_with_timeouts(connect_timeout, read_timeout, total_timeout);
+        let client = create_http_client_with_timeouts(
+            timeout_config.connect_duration(),
+            timeout_config.read_duration(),
+            timeout_config.total_duration(),
+        );
         let mut request = client.get(addr.url());
         if let (Some(u), Some(p)) = (addr.username(), addr.password()) {
             request = request.basic_auth(u, Some(p));
@@ -278,7 +285,7 @@ mod tests {
     use crate::{
         addr::{
             AddrResult,
-            redirect::{AuthConfig, Rule},
+            access_ctrl::{AuthConfig, Rule},
         },
         tools::test_init,
         update::DownloadOptions,
@@ -348,7 +355,7 @@ mod tests {
         if test_file.exists() {
             std::fs::remove_file(&test_file).owe_res()?;
         }
-        let redirect = RedirectService::from_rule(
+        let redirect = NetAccessCtrl::from_rule(
             Rule::new(server.url("/unkonw*"), server.url("/success")),
             Some(AuthConfig::new(
                 "generic-1747535977632",
@@ -357,7 +364,7 @@ mod tests {
         );
         let http_addr = HttpResource::from(server.url("/unkonw.txt"));
 
-        let http_accessor = HttpAccessor::default().with_redirect(Some(redirect));
+        let http_accessor = HttpAccessor::default().with_ctrl(Some(redirect));
         http_accessor
             .download_to_local(
                 &Address::from(http_addr),

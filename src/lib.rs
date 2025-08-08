@@ -5,6 +5,7 @@ pub mod archive;
 pub mod ext;
 pub mod opt;
 mod predule;
+pub mod timeout;
 pub mod tools;
 pub mod tpl;
 pub mod types;

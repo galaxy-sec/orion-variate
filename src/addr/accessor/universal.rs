@@ -1,4 +1,4 @@
-use crate::addr::redirect::serv::RedirectService;
+use crate::addr::access_ctrl::serv::NetAccessCtrl;
 use crate::addr::{AddrResult, Address};
 use crate::types::{ResourceDownloader, ResourceUploader, UpdateUnit};
 use crate::update::{DownloadOptions, UploadOptions};
@@ -15,19 +15,19 @@ use super::local::LocalAccessor;
 #[derive(Debug, Clone, Default)]
 pub struct UniversalConfig {
     /// 重定向服务配置
-    pub redirect: Option<RedirectService>,
+    pub accs_ctrl: Option<NetAccessCtrl>,
 }
 
 impl UniversalConfig {
-    pub fn with_redirect(mut self, redirect: RedirectService) -> Self {
-        self.redirect = Some(redirect);
+    pub fn with_ctrl(mut self, ctrl: NetAccessCtrl) -> Self {
+        self.accs_ctrl = Some(ctrl);
         self
     }
-    pub fn with_redirect_file(mut self, path: &Path) -> Self {
+    pub fn with_ctrl_file(mut self, path: &Path) -> Self {
         if path.exists() {
-            match RedirectService::from_yml(path) {
+            match NetAccessCtrl::from_yml(path) {
                 Ok(redirect) => {
-                    self.redirect = Some(redirect);
+                    self.accs_ctrl = Some(redirect);
                 }
                 Err(e) => {
                     error!("load redirect conf failed!\npath:{} \n{e}", path.display());
@@ -38,7 +38,7 @@ impl UniversalConfig {
     }
     pub fn with_redirect_file_opt(self, path_opt: &Option<PathBuf>) -> Self {
         if let Some(path) = path_opt {
-            return self.with_redirect_file(path.as_path());
+            return self.with_ctrl_file(path.as_path());
         }
         self
     }
@@ -58,10 +58,8 @@ pub struct UniversalAccessor {
 impl UniversalAccessor {
     /// 创建新的统一地址访问器
     pub fn new(config: UniversalConfig) -> Self {
-        let git = GitAccessor::default()
-            .with_redirect(config.redirect.clone())
-            .with_proxy_from_env();
-        let http = HttpAccessor::default().with_redirect(config.redirect.clone());
+        let git = GitAccessor::default().with_ctrl(config.accs_ctrl.clone());
+        let http = HttpAccessor::default().with_ctrl(config.accs_ctrl.clone());
         let local = LocalAccessor::default();
 
         Self {

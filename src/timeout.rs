@@ -11,12 +11,6 @@ pub struct TimeoutConfig {
     pub read_timeout: u64,
     /// 总操作超时时间（秒）
     pub total_timeout: u64,
-    /// 重试次数
-    pub max_retries: u32,
-    /// 重试间隔时间（秒）
-    pub retry_interval: u64,
-    /// 是否在超时时启用重试
-    pub retry_on_timeout: bool,
 }
 
 impl TimeoutConfig {
@@ -31,9 +25,6 @@ impl TimeoutConfig {
             connect_timeout: 30,
             read_timeout: 60,
             total_timeout: 300,
-            max_retries: 3,
-            retry_interval: 2,
-            retry_on_timeout: true,
         }
     }
 
@@ -43,9 +34,6 @@ impl TimeoutConfig {
             connect_timeout: 60,
             read_timeout: 300,
             total_timeout: 3600,
-            max_retries: 5,
-            retry_interval: 5,
-            retry_on_timeout: true,
         }
     }
 
@@ -55,9 +43,6 @@ impl TimeoutConfig {
             connect_timeout: 120,
             read_timeout: 180,
             total_timeout: 1800,
-            max_retries: 2,
-            retry_interval: 10,
-            retry_on_timeout: true,
         }
     }
 
@@ -74,17 +59,9 @@ impl TimeoutConfig {
         Duration::from_secs(self.total_timeout)
     }
 
-    pub fn retry_interval_duration(&self) -> Duration {
-        Duration::from_secs(self.retry_interval)
-    }
-
     /// 验证配置有效性
     pub fn validate(&self) -> bool {
-        self.connect_timeout > 0
-            && self.read_timeout > 0
-            && self.total_timeout > 0
-            && self.max_retries > 0
-            && self.retry_interval > 0
+        self.connect_timeout > 0 && self.read_timeout > 0 && self.total_timeout > 0
     }
 }
 
@@ -94,9 +71,6 @@ impl Default for TimeoutConfig {
             connect_timeout: 30,
             read_timeout: 60,
             total_timeout: 300,
-            max_retries: 3,
-            retry_interval: 2,
-            retry_on_timeout: true,
         }
     }
 }
@@ -154,25 +128,6 @@ impl ProgressTracker {
     pub fn total_expected(&self) -> Option<u64> {
         self.total_expected
     }
-}
-
-// 辅助函数
-fn get_env_u64(key: &str, default: u64) -> u64 {
-    std::env::var(key)
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(default)
-}
-
-fn get_env_bool(key: &str, default: bool) -> bool {
-    std::env::var(key)
-        .ok()
-        .and_then(|s| match s.to_lowercase().as_str() {
-            "true" | "1" | "yes" | "on" => Some(true),
-            "false" | "0" | "no" | "off" => Some(false),
-            _ => None,
-        })
-        .unwrap_or(default)
 }
 
 #[cfg(test)]

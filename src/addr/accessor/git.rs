@@ -1,5 +1,4 @@
-use crate::addr::proxy::ProxyConfig;
-use crate::addr::redirect::serv::RedirectService;
+use crate::addr::access_ctrl::serv::NetAccessCtrl;
 use crate::addr::{AddrReason, AddrResult, Address, GitRepository};
 use crate::update::UploadOptions;
 use crate::{
@@ -31,18 +30,10 @@ use orion_infra::path::ensure_path;
 #[getset(get = "pub", set = "pub")]
 pub struct GitAccessor {
     #[getset(set_with = "pub")]
-    redirect: Option<RedirectService>,
-    #[getset(set_with = "pub")]
-    proxy: Option<ProxyConfig>,
+    ctrl: Option<NetAccessCtrl>,
 }
 
 impl GitAccessor {
-    /// 从环境变量自动加载代理配置
-    /// 支持 https_proxy, http_proxy, all_proxy 等标准环境变量
-    pub fn with_proxy_from_env(mut self) -> Self {
-        self.proxy = ProxyConfig::from_standard_env();
-        self
-    }
     /// 构建远程回调（包含SSH认证和Token认证）
     fn build_remote_callbacks(&self, addr: &GitRepository) -> git2::RemoteCallbacks<'_> {
         let mut callbacks = git2::RemoteCallbacks::new();
@@ -423,7 +414,7 @@ impl GitAccessor {
 
     /// 克隆新仓库
     fn clone_repo(&self, addr: &GitRepository, target_dir: &Path) -> Result<(), git2::Error> {
-        let repo_addr = if let Some(director) = &self.redirect {
+        let repo_addr = if let Some(director) = &self.ctrl {
             director.direct_git_addr(addr.clone())
         } else {
             addr.clone()
@@ -446,7 +437,7 @@ impl GitAccessor {
         fetch_options.remote_callbacks(callbacks);
 
         // 配置代理选项
-        if let Some(proxy_config) = &self.proxy {
+        if let Some(proxy_config) = self.ctrl.as_ref().map(|x| x.proxy_git(addr)).flatten() {
             let mut proxy_options = git2::ProxyOptions::new();
             proxy_options.url(proxy_config.url().as_str());
             fetch_options.proxy_options(proxy_options);
@@ -477,7 +468,7 @@ impl GitAccessor {
         fetch_options.remote_callbacks(callbacks);
 
         // 配置代理选项
-        if let Some(proxy_config) = &self.proxy {
+        if let Some(proxy_config) = self.ctrl.as_ref().map(|x| x.proxy_git(addr)).flatten() {
             let mut proxy_options = git2::ProxyOptions::new();
             proxy_options.url(proxy_config.url().as_str());
             fetch_options.proxy_options(proxy_options);
@@ -636,9 +627,9 @@ impl GitAccessor {
         push_options.remote_callbacks(self.build_remote_callbacks(addr));
 
         // 配置代理选项
-        if let Some(proxy_config) = &self.proxy {
+        if let Some(proxy_config) = self.ctrl.as_ref().map(|x| x.proxy_git(addr)).flatten() {
             let mut proxy_options = git2::ProxyOptions::new();
-            proxy_options.url(proxy_config.url().as_str());
+            proxy_options.url(proxy_config.url());
             push_options.proxy_options(proxy_options);
         }
         origin.push(
@@ -675,7 +666,7 @@ fn find_default_ssh_key() -> Option<PathBuf> {
 }
 #[cfg(test)]
 mod tests {
-    use crate::addr::redirect::{AuthConfig, Rule};
+    use crate::addr::access_ctrl::{AuthConfig, Rule};
     use crate::{addr::AddrResult, tools::test_init};
 
     use super::*;
@@ -779,7 +770,7 @@ mod tests {
             std::fs::remove_dir_all(&dest_path).assert();
         }
         std::fs::create_dir_all(&dest_path).assert();
-        let redirect = RedirectService::from_rule(
+        let redirect = NetAccessCtrl::from_rule(
             Rule::new(
                 "https://github.com/galaxy-sec/hello-none*",
                 "https://github.com/galaxy-sec/hello-word",
@@ -792,7 +783,7 @@ mod tests {
 
         let git_addr =
             GitRepository::from("https://github.com/galaxy-sec/hello-none.git").with_branch("main");
-        let accessor = GitAccessor::default().with_redirect(Some(redirect));
+        let accessor = GitAccessor::default().with_ctrl(Some(redirect));
         // 执行克隆
         //   let accessor = GitAccessor::default();
         let git_up = accessor

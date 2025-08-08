@@ -4,35 +4,39 @@ use getset::Getters;
 use orion_common::serde::Yamlable;
 use orion_error::{ErrorOwe, ErrorWith};
 
-use crate::addr::{
-    AddrError, GitRepository, HttpResource,
-    redirect::{
-        auth::AuthConfig,
-        unit::{RedirectResult, Unit},
-    },
-};
 use crate::vars::{EnvDict, EnvEvalable};
+use crate::{
+    addr::{
+        AddrError, GitRepository, HttpResource,
+        access_ctrl::{
+            auth::AuthConfig,
+            unit::{RedirectResult, Unit},
+        },
+        proxy::ProxyConfig,
+    },
+    timeout::TimeoutConfig,
+};
 
-use super::rule::Rule;
+use super::{rule::Rule, unit::UnitCtrl};
 use serde_derive::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize, Getters)]
 #[getset(get = "pub")]
-pub struct RedirectService {
+pub struct NetAccessCtrl {
     units: Vec<Unit>,
     enable: bool,
 }
 
-pub type ServHandle = Rc<RedirectService>;
+pub type ServHandle = Rc<NetAccessCtrl>;
 
-impl RedirectService {
+impl NetAccessCtrl {
     pub fn new(units: Vec<Unit>, enable: bool) -> Self {
         Self { units, enable }
     }
     pub fn redirect(&self, url: &str) -> RedirectResult {
         let mut path = RedirectResult::Origin(url.to_string());
         for unit in &self.units {
-            path = unit.proxy(path.path());
+            path = unit.redirect(path.path());
             if path.is_proxy() {
                 break;
             }
@@ -55,23 +59,80 @@ impl RedirectService {
         }
         origin
     }
+    pub fn direct_git_ctrl(&self, origin: &GitRepository) -> Option<UnitCtrl> {
+        for unit in &self.units {
+            if unit.direct_git_addr(&origin).is_some() {
+                return Some(UnitCtrl::new(
+                    unit.auth().clone(),
+                    unit.timeout().clone(),
+                    unit.proxy().clone(),
+                ));
+            }
+        }
+        None
+    }
+    pub fn proxy_git(&self, origin: &GitRepository) -> Option<ProxyConfig> {
+        self.direct_git_ctrl(origin)
+            .map(|x| x.proxy().clone())
+            .flatten()
+    }
+    pub fn proxy_http(&self, origin: &HttpResource) -> Option<ProxyConfig> {
+        self.direct_http_ctrl(origin)
+            .map(|x| x.proxy().clone())
+            .flatten()
+    }
+
+    pub fn timeout_git(&self, origin: &GitRepository) -> Option<TimeoutConfig> {
+        self.direct_git_ctrl(origin)
+            .map(|x| x.timeout().clone())
+            .flatten()
+    }
+    pub fn timeout_http(&self, origin: &HttpResource) -> Option<TimeoutConfig> {
+        self.direct_http_ctrl(origin)
+            .map(|x| x.timeout().clone())
+            .flatten()
+    }
+
+    pub fn auth_git(&self, origin: &GitRepository) -> Option<AuthConfig> {
+        self.direct_git_ctrl(origin)
+            .map(|x| x.auth().clone())
+            .flatten()
+    }
+    pub fn auth_http(&self, origin: &HttpResource) -> Option<AuthConfig> {
+        self.direct_http_ctrl(origin)
+            .map(|x| x.auth().clone())
+            .flatten()
+    }
+
+    pub fn direct_http_ctrl(&self, origin: &HttpResource) -> Option<UnitCtrl> {
+        for unit in &self.units {
+            if unit.direct_http_addr(&origin).is_some() {
+                return Some(UnitCtrl::new(
+                    unit.auth().clone(),
+                    unit.timeout().clone(),
+                    unit.proxy().clone(),
+                ));
+            }
+        }
+        None
+    }
 
     pub fn from_rule(rule: Rule, auth: Option<AuthConfig>) -> Self {
-        let unit = Unit::new(vec![rule], auth);
+        let unit = Unit::new(vec![rule], auth, None);
         Self::new(vec![unit], true)
     }
 }
-impl TryFrom<&PathBuf> for RedirectService {
+impl TryFrom<&PathBuf> for NetAccessCtrl {
     type Error = AddrError;
 
     fn try_from(value: &PathBuf) -> Result<Self, Self::Error> {
-        RedirectService::from_yml(value).owe_res().with(value)
+        NetAccessCtrl::from_yml(value).owe_res().with(value)
     }
 }
 
-impl EnvEvalable<RedirectService> for RedirectService {
-    fn env_eval(self, dict: &EnvDict) -> RedirectService {
-        RedirectService {
+impl EnvEvalable<NetAccessCtrl> for NetAccessCtrl {
+    fn env_eval(self, dict: &EnvDict) -> NetAccessCtrl {
+        NetAccessCtrl {
             units: self
                 .units
                 .into_iter()
@@ -84,14 +145,16 @@ impl EnvEvalable<RedirectService> for RedirectService {
 
 #[cfg(test)]
 mod tests {
+    use crate::addr::proxy::ProxyConfig;
+
     use super::*;
     use tempfile::tempdir;
 
     #[test]
     fn test_serv_serialization_basic() {
-        let serv = RedirectService::new(vec![], false);
+        let serv = NetAccessCtrl::new(vec![], false);
         let serialized = serde_yaml::to_string(&serv).unwrap();
-        let deserialized: RedirectService = serde_yaml::from_str(&serialized).unwrap();
+        let deserialized: NetAccessCtrl = serde_yaml::from_str(&serialized).unwrap();
 
         assert_eq!(deserialized.units().len(), 0);
         assert!(!deserialized.enable());
@@ -104,11 +167,12 @@ mod tests {
             Rule::new("https://github.com/*", "https://mirror.github.com/"),
             Rule::new("https://gitlab.com/*", "https://mirror.gitlab.com/"),
         ];
-        let unit = Unit::new(rules, auth);
-        let serv = RedirectService::new(vec![unit], true);
+        let proxy = ProxyConfig::new("https://proxy.example.com:8080");
+        let unit = Unit::new(rules, auth, Some(proxy));
+        let serv = NetAccessCtrl::new(vec![unit], true);
 
         let serialized = serde_json::to_string(&serv).unwrap();
-        let deserialized: RedirectService = serde_json::from_str(&serialized).unwrap();
+        let deserialized: NetAccessCtrl = serde_json::from_str(&serialized).unwrap();
 
         assert_eq!(deserialized.units().len(), 1);
         assert!(deserialized.enable());
@@ -126,7 +190,7 @@ units:
 enable: true
 "#;
 
-        let deserialized: RedirectService = serde_yaml::from_str(yaml_content).unwrap();
+        let deserialized: NetAccessCtrl = serde_yaml::from_str(yaml_content).unwrap();
         assert!(deserialized.enable());
         assert_eq!(deserialized.units().len(), 1);
         assert_eq!(
@@ -139,10 +203,10 @@ enable: true
     fn test_serv_from_rule_serialization() {
         let rule = Rule::new("https://test.com/*", "https://redirect.com/");
         let auth = Some(AuthConfig::new("admin", "secret"));
-        let serv = RedirectService::from_rule(rule, auth);
+        let serv = NetAccessCtrl::from_rule(rule, auth);
 
         let serialized = serde_json::to_string_pretty(&serv).unwrap();
-        let deserialized: RedirectService = serde_json::from_str(&serialized).unwrap();
+        let deserialized: NetAccessCtrl = serde_json::from_str(&serialized).unwrap();
 
         assert!(deserialized.enable());
         assert_eq!(deserialized.units().len(), 1);
@@ -155,10 +219,12 @@ enable: true
         let unit1 = Unit::new(
             vec![Rule::new("https://api1.com/*", "https://proxy1.com/")],
             Some(AuthConfig::new("user1", "pass1")),
+            None,
         );
 
         let unit2 = Unit::new(
             vec![Rule::new("https://api2.com/*", "https://proxy2.com/")],
+            None,
             None,
         );
 
@@ -168,12 +234,13 @@ enable: true
                 Rule::new("https://api3.com/v2/*", "https://proxy3.com/v2/"),
             ],
             Some(AuthConfig::new("user3", "pass3")),
+            None,
         );
 
-        let serv = RedirectService::new(vec![unit1, unit2, unit3], true);
+        let serv = NetAccessCtrl::new(vec![unit1, unit2, unit3], true);
 
         let serialized = serde_yaml::to_string(&serv).unwrap();
-        let deserialized: RedirectService = serde_yaml::from_str(&serialized).unwrap();
+        let deserialized: NetAccessCtrl = serde_yaml::from_str(&serialized).unwrap();
 
         assert_eq!(deserialized.units().len(), 3);
         assert!(deserialized.enable());
@@ -199,7 +266,7 @@ units:
 enable: true
 "#;
 
-        let deserialized: RedirectService = serde_yaml::from_str(yaml_content).unwrap();
+        let deserialized: NetAccessCtrl = serde_yaml::from_str(yaml_content).unwrap();
 
         assert_eq!(deserialized.units().len(), 2);
         assert!(deserialized.enable());
@@ -223,7 +290,7 @@ units: []
 enable: false
 "#;
 
-        let deserialized: RedirectService = serde_yaml::from_str(yaml_content).unwrap();
+        let deserialized: NetAccessCtrl = serde_yaml::from_str(yaml_content).unwrap();
 
         assert_eq!(deserialized.units().len(), 0);
         assert!(!deserialized.enable());
@@ -251,7 +318,7 @@ enable: false
 }
 "#;
 
-        let deserialized: RedirectService = serde_json::from_str(json_content).unwrap();
+        let deserialized: NetAccessCtrl = serde_json::from_str(json_content).unwrap();
 
         assert_eq!(deserialized.units().len(), 1);
         assert!(deserialized.enable());
@@ -264,8 +331,8 @@ enable: false
     #[test]
     fn test_serv_redirect_functionality() {
         let rules = vec![Rule::new("https://github.com/*", "https://mirror.com/")];
-        let unit = Unit::new(rules, None);
-        let serv = RedirectService::new(vec![unit], true);
+        let unit = Unit::new(rules, None, None);
+        let serv = NetAccessCtrl::new(vec![unit], true);
 
         let result = serv.redirect("https://github.com/user/repo");
         match result {
@@ -279,8 +346,8 @@ enable: false
     #[test]
     fn test_serv_no_redirect_match() {
         let rules = vec![Rule::new("https://github.com/*", "https://mirror.com/")];
-        let unit = Unit::new(rules, None);
-        let serv = RedirectService::new(vec![unit], true);
+        let unit = Unit::new(rules, None, None);
+        let serv = NetAccessCtrl::new(vec![unit], true);
 
         let result = serv.redirect("https://gitlab.com/user/repo");
         match result {
@@ -300,14 +367,14 @@ enable: false
             "https://file-test.com/*",
             "https://file-proxy.com/",
         )];
-        let unit = Unit::new(rules, Some(AuthConfig::new("file_user", "file_pass")));
-        let original_serv = RedirectService::new(vec![unit], true);
+        let unit = Unit::new(rules, Some(AuthConfig::new("file_user", "file_pass")), None);
+        let original_serv = NetAccessCtrl::new(vec![unit], true);
 
         // 写入文件
         original_serv.save_yml(&file_path).unwrap();
 
         // 从文件读取
-        let loaded_serv = RedirectService::try_from(&file_path).unwrap();
+        let loaded_serv = NetAccessCtrl::try_from(&file_path).unwrap();
 
         assert_eq!(loaded_serv.units().len(), original_serv.units().len());
         assert_eq!(loaded_serv.enable(), original_serv.enable());
@@ -315,12 +382,13 @@ enable: false
 
     #[test]
     fn test_redirect_service() {
-        let service = RedirectService::new(
+        let service = NetAccessCtrl::new(
             vec![Unit::new(
                 vec![Rule::new(
                     "https://github.com/galaxy-sec/galaxy-flow*",
                     "https://gflow.com",
                 )],
+                None,
                 None,
             )],
             true,
@@ -352,10 +420,11 @@ enable: false
             ValueType::String("test_user".to_string()),
         );
 
-        let service = RedirectService::new(
+        let service = NetAccessCtrl::new(
             vec![
                 Unit::new(
                     vec![Rule::new("https://${DOMAIN}/*", "https://${TARGET}")],
+                    None,
                     None,
                 ),
                 Unit::new(
@@ -364,6 +433,7 @@ enable: false
                         "https://mirror.${DOMAIN}",
                     )],
                     Some(AuthConfig::new("${USERNAME}", "password")),
+                    None,
                 ),
             ],
             true,
@@ -403,9 +473,10 @@ enable: false
 
         let env_dict = EnvDict::new();
 
-        let service = RedirectService::new(
+        let service = NetAccessCtrl::new(
             vec![Unit::new(
                 vec![Rule::new("https://github.com/*", "https://mirror.com")],
+                None,
                 None,
             )],
             false,

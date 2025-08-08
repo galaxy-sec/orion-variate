@@ -12,8 +12,8 @@ pub use http::HttpResource;
 pub use local::LocalPath;
 pub use types::Address;
 pub use validation::{Validate, ValidationError, ValidationResult};
+pub mod access_ctrl;
 pub mod error;
-pub mod redirect;
 
 pub use error::{AddrError, AddrReason, AddrResult};
 pub mod proxy;
