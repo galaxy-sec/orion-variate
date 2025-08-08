@@ -223,10 +223,10 @@ impl GitRepository {
 
                 // 提取用户名和密码
                 let username = url.username();
-                if !username.is_empty() {
-                    if let Some(password) = url.password() {
-                        credentials.push((base_url, username.to_string(), password.to_string()));
-                    }
+                if !username.is_empty()
+                    && let Some(password) = url.password()
+                {
+                    credentials.push((base_url, username.to_string(), password.to_string()));
                 }
                 //}
             }
