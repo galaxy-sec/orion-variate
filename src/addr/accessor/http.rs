@@ -2,7 +2,10 @@ use crate::{
     addr::{
         AddrReason, AddrResult, Address, HttpResource,
         access_ctrl::serv::NetAccessCtrl,
-        accessor::creator::{create_http_client, create_http_client_with_timeouts},
+        accessor::{
+            client::create_http_client_by_ctrl,
+            creator::{create_http_client, create_http_client_with_timeouts},
+        },
         http::filename_of_url,
     },
     predule::*,
@@ -49,7 +52,12 @@ impl HttpAccessor {
             addr.clone()
         };
 
-        let client = create_http_client();
+        let client = create_http_client_by_ctrl(
+            self.ctrl()
+                .clone()
+                .map(|x| x.direct_http_ctrl(&addr))
+                .flatten(),
+        );
         let file_name = filename_of_url(addr.url()).unwrap_or_else(|| "file.bin".to_string());
         ctx.with_path("local file", file_path.as_ref());
 
@@ -144,17 +152,11 @@ impl HttpAccessor {
         }
         let mut ctx = WithContext::want("download url");
         ctx.with("url", addr.url());
-        let timeout_config = self
-            .ctrl
-            .as_ref()
-            .map(|x| x.timeout_http(&addr))
-            .flatten()
-            .unwrap_or(TimeoutConfig::http_simple());
-
-        let client = create_http_client_with_timeouts(
-            timeout_config.connect_duration(),
-            timeout_config.read_duration(),
-            timeout_config.total_duration(),
+        let client = create_http_client_by_ctrl(
+            self.ctrl()
+                .clone()
+                .map(|x| x.direct_http_ctrl(&addr))
+                .flatten(),
         );
         let mut request = client.get(addr.url());
         if let (Some(u), Some(p)) = (addr.username(), addr.password()) {
