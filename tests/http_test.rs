@@ -34,7 +34,7 @@ async fn test_http_accessor_download() {
 fn test_http_accessor_creation() {
     // 测试HttpAccessor的创建
     let accessor = HttpAccessor::default();
-    assert!(accessor.redirect().is_none());
+    assert!(accessor.ctrl().is_none());
 }
 
 #[test]

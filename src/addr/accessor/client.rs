@@ -2,11 +2,11 @@ use std::time::Duration;
 
 use crate::addr::access_ctrl::UnitCtrl;
 
-use reqwest::{Client, ClientBuilder, Proxy};
+use reqwest::{ClientBuilder, Proxy};
 
 pub fn create_http_client_by_ctrl(ctrl: Option<UnitCtrl>) -> reqwest::Client {
     // 使用 UnitCtrl 中的超时配置创建客户端
-    let mut builder = if let Some(timeout) = ctrl.as_ref().map(|x| x.timeout().clone()).flatten() {
+    let mut builder = if let Some(timeout) = ctrl.as_ref().and_then(|x| x.timeout().clone()) {
         ClientBuilder::new()
             .connect_timeout(timeout.connect_duration())
             .read_timeout(timeout.read_duration())
@@ -16,7 +16,7 @@ pub fn create_http_client_by_ctrl(ctrl: Option<UnitCtrl>) -> reqwest::Client {
     } else {
         ClientBuilder::new()
     };
-    if let Some(proxy) = ctrl.as_ref().map(|x| x.proxy().clone()).flatten() {
+    if let Some(proxy) = ctrl.as_ref().and_then(|x| x.proxy().clone()) {
         if let Ok(proxy) = Proxy::all(proxy.url().as_str()) {
             builder = builder.proxy(proxy);
         } else {

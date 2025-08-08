@@ -8,7 +8,10 @@
 // 运行命令：
 // cargo test --test proxy_integration_test
 
+use orion_variate::addr::access_ctrl::Rule;
+use orion_variate::addr::access_ctrl::serv::NetAccessCtrl;
 use orion_variate::addr::accessor::GitAccessor;
+use orion_variate::addr::proxy::ProxyConfig;
 use orion_variate::addr::{Address, GitRepository};
 use orion_variate::types::ResourceDownloader;
 use orion_variate::update::DownloadOptions;
@@ -18,14 +21,18 @@ fn test_git_proxy() {
     // 示例1：基本代理配置
     println!("=== 示例1: 基本代理配置 ===");
     let _git_addr = GitRepository::from("https://github.com/example/repo.git");
-    let accessor = GitAccessor::default().with_proxy_from_env();
-    match accessor.proxy() {
+    let accessor = GitAccessor::default().with_ctrl(Some(NetAccessCtrl::from_rule(
+        Rule::new("*", ""),
+        None,
+        None,
+    )));
+    match accessor
+        .ctrl()
+        .clone()
+        .and_then(|x| x.proxy_git(&_git_addr))
+    {
         Some(proxy) => {
             println!("使用代理: {}", proxy.url());
-            println!("代理类型: {:?}", proxy.proxy_type());
-            if let Some(auth) = proxy.auth() {
-                println!("认证用户: {}", auth.username());
-            }
         }
         None => println!("未配置代理"),
     }
@@ -40,8 +47,19 @@ fn test_git_proxy() {
 
     println!("测试仓库: {test_repo}");
 
+    let accessor = GitAccessor::default().with_ctrl(Some(NetAccessCtrl::from_rule(
+        Rule::new("*", ""),
+        None,
+        //export https_proxy=http://127.0.0.1:7890 http_proxy=http://127.0.0.1:7890 all_proxy=socks5://127.0.0.1:7890
+        Some(ProxyConfig::new("http://127.0.0.1:7890")),
+    )));
+
     // 测试代理配置
-    match accessor.proxy() {
+    match accessor
+        .ctrl()
+        .clone()
+        .and_then(|x| x.proxy_git(&_git_addr))
+    {
         Some(proxy) => {
             println!("使用代理: {}", proxy.url());
             println!("准备克隆到: {}", temp_dir.display());

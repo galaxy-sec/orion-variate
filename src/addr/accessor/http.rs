@@ -1,15 +1,9 @@
 use crate::{
     addr::{
-        AddrReason, AddrResult, Address, HttpResource,
-        access_ctrl::serv::NetAccessCtrl,
-        accessor::{
-            client::create_http_client_by_ctrl,
-            creator::{create_http_client, create_http_client_with_timeouts},
-        },
-        http::filename_of_url,
+        AddrReason, AddrResult, Address, HttpResource, access_ctrl::serv::NetAccessCtrl,
+        accessor::client::create_http_client_by_ctrl, http::filename_of_url,
     },
     predule::*,
-    timeout::TimeoutConfig,
     types::ResourceDownloader,
     update::{DownloadOptions, HttpMethod, UploadOptions},
 };
@@ -52,12 +46,8 @@ impl HttpAccessor {
             addr.clone()
         };
 
-        let client = create_http_client_by_ctrl(
-            self.ctrl()
-                .clone()
-                .map(|x| x.direct_http_ctrl(&addr))
-                .flatten(),
-        );
+        let client =
+            create_http_client_by_ctrl(self.ctrl().clone().and_then(|x| x.direct_http_ctrl(&addr)));
         let file_name = filename_of_url(addr.url()).unwrap_or_else(|| "file.bin".to_string());
         ctx.with_path("local file", file_path.as_ref());
 
@@ -152,12 +142,8 @@ impl HttpAccessor {
         }
         let mut ctx = WithContext::want("download url");
         ctx.with("url", addr.url());
-        let client = create_http_client_by_ctrl(
-            self.ctrl()
-                .clone()
-                .map(|x| x.direct_http_ctrl(&addr))
-                .flatten(),
-        );
+        let client =
+            create_http_client_by_ctrl(self.ctrl().clone().and_then(|x| x.direct_http_ctrl(&addr)));
         let mut request = client.get(addr.url());
         if let (Some(u), Some(p)) = (addr.username(), addr.password()) {
             request = request.basic_auth(u, Some(p));
@@ -363,6 +349,7 @@ mod tests {
                 "generic-1747535977632",
                 "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
             )),
+            None,
         );
         let http_addr = HttpResource::from(server.url("/unkonw.txt"));
 

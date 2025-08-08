@@ -61,7 +61,7 @@ impl NetAccessCtrl {
     }
     pub fn direct_git_ctrl(&self, origin: &GitRepository) -> Option<UnitCtrl> {
         for unit in &self.units {
-            if unit.direct_git_addr(&origin).is_some() {
+            if unit.direct_git_addr(origin).is_some() {
                 return Some(UnitCtrl::new(
                     unit.auth().clone(),
                     unit.timeout().clone(),
@@ -72,41 +72,32 @@ impl NetAccessCtrl {
         None
     }
     pub fn proxy_git(&self, origin: &GitRepository) -> Option<ProxyConfig> {
-        self.direct_git_ctrl(origin)
-            .map(|x| x.proxy().clone())
-            .flatten()
+        self.direct_git_ctrl(origin).and_then(|x| x.proxy().clone())
     }
     pub fn proxy_http(&self, origin: &HttpResource) -> Option<ProxyConfig> {
         self.direct_http_ctrl(origin)
-            .map(|x| x.proxy().clone())
-            .flatten()
+            .and_then(|x| x.proxy().clone())
     }
 
     pub fn timeout_git(&self, origin: &GitRepository) -> Option<TimeoutConfig> {
         self.direct_git_ctrl(origin)
-            .map(|x| x.timeout().clone())
-            .flatten()
+            .and_then(|x| x.timeout().clone())
     }
     pub fn timeout_http(&self, origin: &HttpResource) -> Option<TimeoutConfig> {
         self.direct_http_ctrl(origin)
-            .map(|x| x.timeout().clone())
-            .flatten()
+            .and_then(|x| x.timeout().clone())
     }
 
     pub fn auth_git(&self, origin: &GitRepository) -> Option<AuthConfig> {
-        self.direct_git_ctrl(origin)
-            .map(|x| x.auth().clone())
-            .flatten()
+        self.direct_git_ctrl(origin).and_then(|x| x.auth().clone())
     }
     pub fn auth_http(&self, origin: &HttpResource) -> Option<AuthConfig> {
-        self.direct_http_ctrl(origin)
-            .map(|x| x.auth().clone())
-            .flatten()
+        self.direct_http_ctrl(origin).and_then(|x| x.auth().clone())
     }
 
     pub fn direct_http_ctrl(&self, origin: &HttpResource) -> Option<UnitCtrl> {
         for unit in &self.units {
-            if unit.direct_http_addr(&origin).is_some() {
+            if unit.direct_http_addr(origin).is_some() {
                 return Some(UnitCtrl::new(
                     unit.auth().clone(),
                     unit.timeout().clone(),
@@ -117,8 +108,8 @@ impl NetAccessCtrl {
         None
     }
 
-    pub fn from_rule(rule: Rule, auth: Option<AuthConfig>) -> Self {
-        let unit = Unit::new(vec![rule], auth, None);
+    pub fn from_rule(rule: Rule, auth: Option<AuthConfig>, proxy: Option<ProxyConfig>) -> Self {
+        let unit = Unit::new(vec![rule], auth, proxy);
         Self::new(vec![unit], true)
     }
 }
@@ -203,7 +194,7 @@ enable: true
     fn test_serv_from_rule_serialization() {
         let rule = Rule::new("https://test.com/*", "https://redirect.com/");
         let auth = Some(AuthConfig::new("admin", "secret"));
-        let serv = NetAccessCtrl::from_rule(rule, auth);
+        let serv = NetAccessCtrl::from_rule(rule, auth, None);
 
         let serialized = serde_json::to_string_pretty(&serv).unwrap();
         let deserialized: NetAccessCtrl = serde_json::from_str(&serialized).unwrap();

@@ -437,7 +437,7 @@ impl GitAccessor {
         fetch_options.remote_callbacks(callbacks);
 
         // 配置代理选项
-        if let Some(proxy_config) = self.ctrl.as_ref().map(|x| x.proxy_git(addr)).flatten() {
+        if let Some(proxy_config) = self.ctrl.as_ref().and_then(|x| x.proxy_git(addr)) {
             let mut proxy_options = git2::ProxyOptions::new();
             proxy_options.url(proxy_config.url().as_str());
             fetch_options.proxy_options(proxy_options);
@@ -468,7 +468,7 @@ impl GitAccessor {
         fetch_options.remote_callbacks(callbacks);
 
         // 配置代理选项
-        if let Some(proxy_config) = self.ctrl.as_ref().map(|x| x.proxy_git(addr)).flatten() {
+        if let Some(proxy_config) = self.ctrl.as_ref().and_then(|x| x.proxy_git(addr)) {
             let mut proxy_options = git2::ProxyOptions::new();
             proxy_options.url(proxy_config.url().as_str());
             fetch_options.proxy_options(proxy_options);
@@ -627,7 +627,7 @@ impl GitAccessor {
         push_options.remote_callbacks(self.build_remote_callbacks(addr));
 
         // 配置代理选项
-        if let Some(proxy_config) = self.ctrl.as_ref().map(|x| x.proxy_git(addr)).flatten() {
+        if let Some(proxy_config) = self.ctrl.as_ref().and_then(|x| x.proxy_git(addr)) {
             let mut proxy_options = git2::ProxyOptions::new();
             proxy_options.url(proxy_config.url());
             push_options.proxy_options(proxy_options);
@@ -779,6 +779,7 @@ mod tests {
                 "generic-1747535977632",
                 "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
             )),
+            None,
         );
 
         let git_addr =

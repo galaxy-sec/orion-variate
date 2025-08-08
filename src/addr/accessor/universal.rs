@@ -36,7 +36,7 @@ impl UniversalConfig {
         }
         self
     }
-    pub fn with_redirect_file_opt(self, path_opt: &Option<PathBuf>) -> Self {
+    pub fn with_file_opt(self, path_opt: &Option<PathBuf>) -> Self {
         if let Some(path) = path_opt {
             return self.with_ctrl_file(path.as_path());
         }
