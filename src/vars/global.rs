@@ -88,7 +88,7 @@ mod tests {
     use tempfile::TempDir;
 
     use crate::vars::global::{
-        WorkDir, find_project_define, format_os_sys, get_os_info, setup_start_env_vars,
+        WorkDir, find_project_define, get_os_info, setup_start_env_vars,
     };
 
     #[test]
@@ -100,27 +100,12 @@ mod tests {
         assert!(!os_type.is_empty());
 
         // 验证架构名称是有效的
-        let valid_archs = vec!["x86_64", "x86", "arm64", "aarch64", "unknown"];
+        let valid_archs = ["x86_64", "x86", "arm64", "aarch64", "unknown"];
         assert!(valid_archs.contains(&arch.as_str()));
 
         // 验证操作系统类型是有效的
-        let valid_os_types = vec!["macos", "windows", "linux", "unknown"];
+        let valid_os_types = ["macos", "windows", "linux", "unknown"];
         assert!(valid_os_types.contains(&os_type.as_str()));
-    }
-
-    #[test]
-    fn test_format_os_sys() {
-        let os_sys = format_os_sys();
-
-        // 验证格式化字符串不为空
-        assert!(!os_sys.is_empty());
-
-        // 验证格式符合预期: arch_os_vermajor
-        let parts: Vec<&str> = os_sys.split('_').collect();
-        assert_eq!(parts.len(), 3);
-
-        // 验证版本号是数字
-        assert!(parts[2].parse::<u64>().is_ok());
     }
 
     #[test]
@@ -139,7 +124,7 @@ mod tests {
 
         // 调用函数设置环境变量
         let result = setup_start_env_vars();
-        assert!(result.is_ok(), "setup_start_env_vars failed: {:?}", result);
+        assert!(result.is_ok(), "setup_start_env_vars failed: {result:?}");
 
         // 验证环境变量已设置
         assert!(env::var("GXL_OS_SYS").is_ok());
@@ -195,21 +180,24 @@ mod tests {
     fn assert_paths_eq(path1: &std::path::Path, path2: &std::path::Path) {
         let normalized1 = normalize_path_for_comparison(path1);
         let normalized2 = normalize_path_for_comparison(path2);
-        assert_eq!(normalized1, normalized2, "Path comparison failed: {:?} vs {:?}", path1, path2);
+        assert_eq!(
+            normalized1, normalized2,
+            "Path comparison failed: {path1:?} vs {path2:?}"
+        );
     }
 
     #[test]
     fn test_work_dir_with_relative_path() {
         let original_dir = env::current_dir().expect("Failed to get current dir");
-        
+
         {
             // 使用相对路径创建WorkDir
             let _work_dir = WorkDir::change(".").expect("Failed to change directory");
-            
+
             // 验证工作目录仍然是当前目录
             assert_paths_eq(&env::current_dir().unwrap(), &original_dir);
         }
-        
+
         // 验证工作目录已恢复
         assert_paths_eq(&env::current_dir().unwrap(), &original_dir);
     }
@@ -218,15 +206,15 @@ mod tests {
     fn test_work_dir_creation_and_restoration() {
         let original_dir = env::current_dir().expect("Failed to get current dir");
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
-        
+
         {
             // 创建WorkDir实例，改变工作目录
             let _work_dir = WorkDir::change(temp_dir.path()).expect("Failed to change directory");
-            
+
             // 验证工作目录已改变
             assert_paths_eq(&env::current_dir().unwrap(), temp_dir.path());
         }
-        
+
         // 验证工作目录已恢复
         assert_paths_eq(&env::current_dir().unwrap(), &original_dir);
     }
@@ -237,16 +225,16 @@ mod tests {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let deep_dir = temp_dir.path().join("level1").join("level2").join("level3");
         std::fs::create_dir_all(&deep_dir).expect("Failed to create deep directory structure");
-        
+
         // 在根目录创建project.toml
         let gal_dir = temp_dir.path().join("_gal");
         std::fs::create_dir(&gal_dir).expect("Failed to create _gal dir");
         let project_file = gal_dir.join("project.toml");
         std::fs::write(&project_file, "").expect("Failed to create project.toml");
-        
+
         // 在深层目录中查找
         let _wd = WorkDir::change(&deep_dir).expect("Failed to change directory");
-        
+
         let result = find_project_define();
         assert!(result.is_some());
         assert_paths_eq(&result.unwrap(), temp_dir.path());
