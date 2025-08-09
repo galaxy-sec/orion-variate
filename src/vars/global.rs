@@ -87,9 +87,7 @@ mod tests {
     use std::env;
     use tempfile::TempDir;
 
-    use crate::vars::global::{
-        WorkDir, find_project_define, get_os_info, setup_start_env_vars,
-    };
+    use crate::vars::global::{WorkDir, find_project_define, get_os_info, setup_start_env_vars};
 
     #[test]
     fn test_get_os_info() {
