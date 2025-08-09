@@ -79,14 +79,14 @@ impl Validate for GitRepository {
         }
 
         // 验证SSH密钥路径
-        if let Some(ssh_key) = &self.ssh_key() {
-            if !Path::new(ssh_key).exists() {
-                errors.push(ValidationError::new(
-                    "ssh_key",
-                    &format!("SSH密钥文件不存在: {ssh_key}",),
-                    "SSH_KEY_NOT_FOUND",
-                ));
-            }
+        if let Some(ssh_key) = &self.ssh_key()
+            && !Path::new(ssh_key).exists()
+        {
+            errors.push(ValidationError::new(
+                "ssh_key",
+                &format!("SSH密钥文件不存在: {ssh_key}",),
+                "SSH_KEY_NOT_FOUND",
+            ));
         }
 
         // 验证认证配置

@@ -168,13 +168,13 @@ mod tests {
 "#;
 
         let decoded: ValueType = serde_yaml::from_str(data).unwrap();
-        if let ValueType::List(mods) = decoded {
-            if let Some(ValueType::Obj(first_mod)) = mods.first() {
-                assert_eq!(
-                    first_mod.get("name"),
-                    Some(&ValueType::String("redis_mock".into()))
-                );
-            }
+        if let ValueType::List(mods) = decoded
+            && let Some(ValueType::Obj(first_mod)) = mods.first()
+        {
+            assert_eq!(
+                first_mod.get("name"),
+                Some(&ValueType::String("redis_mock".into()))
+            );
         }
     }
     #[test]

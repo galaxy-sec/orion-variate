@@ -138,7 +138,7 @@ mod tests {
         let config = UniversalConfig::default();
         let accessor = UniversalAccessor::new(config);
 
-        let dest_path = PathBuf::from("./tmp/hello-word.git");
+        let dest_path = PathBuf::from("./temp/hello-word.git");
         if dest_path.exists() {
             std::fs::remove_dir_all(&dest_path).assert();
         }
@@ -148,7 +148,7 @@ mod tests {
         accessor
             .download_to_local(
                 &git_addr,
-                &PathBuf::from("./tmp/"),
+                &PathBuf::from("./temp/"),
                 &DownloadOptions::default(),
             )
             .await
