@@ -113,3 +113,343 @@ impl OriginDict {
         map
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::vars::dict::ValueDict;
+
+    #[test]
+    fn test_origin_value_from_value_type() {
+        let value = ValueType::from("test_value");
+        let origin_value = OriginValue::from(value);
+        assert_eq!(origin_value.origin().as_ref(), None);
+        assert_eq!(origin_value.value(), &ValueType::from("test_value"));
+    }
+
+    #[test]
+    fn test_origin_value_from_str() {
+        let origin_value = OriginValue::from("test_string");
+        assert_eq!(origin_value.origin().as_ref(), None);
+        assert_eq!(origin_value.value(), &ValueType::from("test_string"));
+    }
+
+    #[test]
+    fn test_origin_value_with_origin() {
+        let origin_value = OriginValue::from("test_value").with_origin("test_origin");
+        assert_eq!(
+            origin_value.origin().as_ref(),
+            Some(&"test_origin".to_string())
+        );
+        assert_eq!(origin_value.value(), &ValueType::from("test_value"));
+    }
+
+    #[test]
+    fn test_origin_value_env_eval() {
+        let mut env_dict = EnvDict::new();
+        env_dict.insert("TEST_VAR", "replaced_value".into());
+
+        let origin_value = OriginValue::from("prefix_${TEST_VAR}_suffix");
+        let evaluated = origin_value.env_eval(&env_dict);
+
+        assert_eq!(evaluated.origin().as_ref(), None);
+        assert_eq!(
+            evaluated.value(),
+            &ValueType::from("prefix_replaced_value_suffix")
+        );
+    }
+
+    #[test]
+    fn test_origin_value_env_eval_with_origin() {
+        let mut env_dict = EnvDict::new();
+        env_dict.insert("TEST_VAR", "replaced_value".into());
+
+        let origin_value =
+            OriginValue::from("prefix_${TEST_VAR}_suffix").with_origin("test_origin");
+        let evaluated = origin_value.env_eval(&env_dict);
+
+        assert_eq!(
+            evaluated.origin().as_ref(),
+            Some(&"test_origin".to_string())
+        );
+        assert_eq!(
+            evaluated.value(),
+            &ValueType::from("prefix_replaced_value_suffix")
+        );
+    }
+
+    #[test]
+    fn test_origin_dict_new() {
+        let dict = OriginDict::new();
+        assert!(dict.is_empty());
+        assert_eq!(dict.len(), 0);
+    }
+
+    #[test]
+    fn test_origin_dict_insert() {
+        let mut dict = OriginDict::new();
+        let result = dict.insert("key1", ValueType::from("value1"));
+        assert_eq!(result, None);
+
+        let result = dict.insert("key1", ValueType::from("new_value"));
+        assert!(result.is_some());
+
+        assert_eq!(dict.len(), 1);
+        assert_eq!(
+            dict.get("key1").unwrap().value(),
+            &ValueType::from("new_value")
+        );
+    }
+
+    #[test]
+    fn test_origin_dict_set_source() {
+        let mut dict = OriginDict::new();
+        dict.insert("key1", ValueType::from("value1"));
+        dict.insert("key2", ValueType::from("value2"));
+
+        dict.set_source("new_source");
+
+        assert_eq!(
+            dict.get("key1").unwrap().origin().as_ref(),
+            Some(&"new_source".to_string())
+        );
+        assert_eq!(
+            dict.get("key2").unwrap().origin().as_ref(),
+            Some(&"new_source".to_string())
+        );
+    }
+
+    #[test]
+    fn test_origin_dict_merge() {
+        let mut dict1 = OriginDict::new();
+        dict1.insert("key1", ValueType::from("value1"));
+        dict1.insert("key2", ValueType::from("value2"));
+
+        let mut dict2 = OriginDict::new();
+        dict2.insert("key2", ValueType::from("new_value2"));
+        dict2.insert("key3", ValueType::from("value3"));
+
+        dict1.merge(&dict2);
+
+        assert_eq!(dict1.len(), 3);
+        assert_eq!(
+            dict1.get("key1").unwrap().value(),
+            &ValueType::from("value1")
+        );
+        assert_eq!(
+            dict1.get("key2").unwrap().value(),
+            &ValueType::from("value2")
+        );
+        assert_eq!(
+            dict1.get("key3").unwrap().value(),
+            &ValueType::from("value3")
+        );
+    }
+
+    #[test]
+    fn test_origin_dict_export_value() {
+        let mut dict = OriginDict::new();
+        dict.insert("key1", ValueType::from("value1"));
+        dict.insert("key2", ValueType::from("value2"));
+
+        let value_map = dict.export_value();
+
+        assert_eq!(value_map.len(), 2);
+        assert_eq!(value_map.get("key1"), Some(&ValueType::from("value1")));
+        assert_eq!(value_map.get("key2"), Some(&ValueType::from("value2")));
+    }
+
+    #[test]
+    fn test_origin_dict_export_dict() {
+        let mut dict = OriginDict::new();
+        dict.insert("key1", ValueType::from("value1"));
+        dict.insert("key2", ValueType::from("value2"));
+
+        let value_dict = dict.export_dict();
+
+        assert_eq!(value_dict.len(), 2);
+        assert_eq!(value_dict.get("key1"), Some(&ValueType::from("value1")));
+        assert_eq!(value_dict.get("key2"), Some(&ValueType::from("value2")));
+    }
+
+    #[test]
+    fn test_origin_dict_export_origin() {
+        let mut dict = OriginDict::new();
+        dict.insert("key1", ValueType::from("value1"));
+        dict.insert("key2", ValueType::from("value2"));
+
+        // 先设置source
+        dict.set_source("origin1");
+
+        let origin_map = dict.export_origin();
+
+        assert_eq!(origin_map.len(), 2);
+        assert_eq!(
+            origin_map.get("key1").unwrap().origin().as_ref(),
+            Some(&"origin1".to_string())
+        );
+        assert_eq!(
+            origin_map.get("key2").unwrap().origin().as_ref(),
+            Some(&"origin1".to_string())
+        );
+    }
+
+    #[test]
+    fn test_origin_dict_from_value_dict() {
+        let mut value_dict = ValueDict::new();
+        value_dict.insert("key1", ValueType::from("value1"));
+        value_dict.insert("key2", ValueType::from("value2"));
+
+        let origin_dict = OriginDict::from(value_dict);
+
+        assert_eq!(origin_dict.len(), 2);
+        assert_eq!(
+            origin_dict.get("key1").unwrap().value(),
+            &ValueType::from("value1")
+        );
+        assert_eq!(
+            origin_dict.get("key2").unwrap().value(),
+            &ValueType::from("value2")
+        );
+        assert_eq!(origin_dict.get("key1").unwrap().origin().as_ref(), None);
+        assert_eq!(origin_dict.get("key2").unwrap().origin().as_ref(), None);
+    }
+
+    #[test]
+    fn test_origin_map_env_eval() {
+        let mut origin_map = OriginMap::new();
+        origin_map.insert(
+            "key1".to_string(),
+            OriginValue::from("prefix_${TEST_VAR}_suffix"),
+        );
+        origin_map.insert(
+            "key2".to_string(),
+            OriginValue::from("static_value").with_origin("test_origin"),
+        );
+
+        let mut env_dict = EnvDict::new();
+        env_dict.insert("TEST_VAR", "replaced_value".into());
+
+        let evaluated_map = origin_map.env_eval(&env_dict);
+
+        assert_eq!(evaluated_map.len(), 2);
+        assert_eq!(
+            evaluated_map.get("key1").unwrap().value(),
+            &ValueType::from("prefix_replaced_value_suffix")
+        );
+        assert_eq!(evaluated_map.get("key1").unwrap().origin().as_ref(), None);
+        assert_eq!(
+            evaluated_map.get("key2").unwrap().value(),
+            &ValueType::from("static_value")
+        );
+        assert_eq!(
+            evaluated_map.get("key2").unwrap().origin().as_ref(),
+            Some(&"test_origin".to_string())
+        );
+    }
+
+    #[test]
+    fn test_origin_value_clone() {
+        let origin_value = OriginValue::from("test_value").with_origin("test_origin");
+        let cloned = origin_value.clone();
+
+        assert_eq!(cloned, origin_value);
+        assert_eq!(cloned.origin().as_ref(), Some(&"test_origin".to_string()));
+        assert_eq!(cloned.value(), &ValueType::from("test_value"));
+    }
+
+    #[test]
+    fn test_origin_dict_clone() {
+        let mut dict = OriginDict::new();
+        dict.insert("key1", ValueType::from("value1"));
+        dict.insert("key2", ValueType::from("value2"));
+
+        // 设置source来测试origin
+        dict.set_source("origin1");
+
+        let cloned = dict.clone();
+
+        assert_eq!(cloned, dict);
+        assert_eq!(cloned.len(), 2);
+        assert_eq!(
+            cloned.get("key1").unwrap().origin().as_ref(),
+            Some(&"origin1".to_string())
+        );
+        assert_eq!(
+            cloned.get("key2").unwrap().origin().as_ref(),
+            Some(&"origin1".to_string())
+        );
+    }
+
+    #[test]
+    fn test_origin_value_debug() {
+        let origin_value = OriginValue::from("test_value").with_origin("test_origin");
+        let debug_str = format!("{:?}", origin_value);
+
+        assert!(debug_str.contains("OriginValue"));
+        assert!(debug_str.contains("test_origin"));
+        assert!(debug_str.contains("test_value"));
+    }
+
+    #[test]
+    fn test_origin_dict_debug() {
+        let mut dict = OriginDict::new();
+        dict.insert("key1", ValueType::from("value1"));
+
+        let debug_str = format!("{:?}", dict);
+
+        assert!(debug_str.contains("OriginDict"));
+        assert!(debug_str.contains("key1"));
+        assert!(debug_str.contains("value1"));
+    }
+
+    #[test]
+    fn test_origin_dict_default() {
+        let dict: OriginDict = OriginDict::default();
+        assert!(dict.is_empty());
+        assert_eq!(dict.len(), 0);
+    }
+
+    #[test]
+    fn test_origin_dict_deref() {
+        let mut dict = OriginDict::new();
+        dict.insert("key1", ValueType::from("value1"));
+        dict.insert("key2", ValueType::from("value2"));
+
+        // Test deref to OriginMap
+        let map: &OriginMap = &dict;
+        assert_eq!(map.len(), 2);
+        assert!(map.contains_key("key1"));
+        assert!(map.contains_key("key2"));
+    }
+
+    #[test]
+    fn test_origin_dict_partial_eq() {
+        let mut dict1 = OriginDict::new();
+        dict1.insert("key1", ValueType::from("value1"));
+        dict1.insert("key2", ValueType::from("value2"));
+
+        let mut dict2 = OriginDict::new();
+        dict2.insert("key1", ValueType::from("value1"));
+        dict2.insert("key2", ValueType::from("value2"));
+
+        let mut dict3 = OriginDict::new();
+        dict3.insert("key1", ValueType::from("value1"));
+        dict3.insert("key2", ValueType::from("different_value"));
+
+        assert_eq!(dict1, dict2);
+        assert_ne!(dict1, dict3);
+    }
+
+    #[test]
+    fn test_origin_value_partial_eq() {
+        let value1 = OriginValue::from("test_value").with_origin("test_origin");
+        let value2 = OriginValue::from("test_value").with_origin("test_origin");
+        let value3 = OriginValue::from("different_value").with_origin("test_origin");
+        let value4 = OriginValue::from("test_value").with_origin("different_origin");
+
+        assert_eq!(value1, value2);
+        assert_ne!(value1, value3);
+        assert_ne!(value1, value4);
+    }
+}

@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
 
 use crate::tpl::TplResult;
 use derive_getters::Getters;
@@ -42,6 +42,15 @@ impl EnvEvalable<ValueDict> for ValueDict {
 pub struct ValueDict {
     dict: ValueMap,
 }
+impl From<HashMap<String, String>> for ValueDict {
+    fn from(map: HashMap<String, String>) -> Self {
+        let mut vmap = ValueMap::new();
+        for (k, v) in map {
+            vmap.insert(k, ValueType::from(v));
+        }
+        Self { dict: vmap }
+    }
+}
 impl ValueDict {
     pub fn new() -> Self {
         Self {
@@ -59,16 +68,7 @@ impl ValueDict {
             }
         }
     }
-    /*
-    pub fn env_eval(self, dict: &EnvDict) -> Self {
-        let mut map = ValueMap::new();
-        for (k, v) in self.dict {
-            let e_v = v.env_eval(dict);
-            map.insert(k, e_v);
-        }
-        Self { dict: map }
-    }
-    */
+
     pub fn eval_from_file(dict: &EnvDict, file_path: &Path) -> TplResult<Self> {
         //let mut cur_dict = dict.clone();
         let ins = ValueDict::from_yml(file_path).owe_res()?;

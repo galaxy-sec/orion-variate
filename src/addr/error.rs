@@ -35,3 +35,55 @@ impl ErrorCode for AddrReason {
 
 pub type AddrResult<T> = Result<T, StructError<AddrReason>>;
 pub type AddrError = StructError<AddrReason>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn test_addr_reason_brief() {
+        let reason = AddrReason::Brief("test error".to_string());
+        assert_eq!(reason.error_code(), 500);
+        assert_eq!(reason.to_string(), "unknown");
+    }
+
+    #[test]
+    fn test_addr_reason_operation_timeout_exceeded() {
+        let timeout = Duration::from_secs(30);
+        let reason = AddrReason::OperationTimeoutExceeded {
+            timeout,
+            attempts: 3,
+        };
+        assert_eq!(reason.error_code(), 408);
+        let error_msg = reason.to_string();
+        assert!(error_msg.contains("30s"));
+        assert!(error_msg.contains("3 attempts"));
+    }
+
+    #[test]
+    fn test_addr_reason_total_timeout_exceeded() {
+        let total_timeout = Duration::from_secs(60);
+        let elapsed = Duration::from_secs(65);
+        let reason = AddrReason::TotalTimeoutExceeded {
+            total_timeout,
+            elapsed,
+        };
+        assert_eq!(reason.error_code(), 408);
+        let error_msg = reason.to_string();
+        assert!(error_msg.contains("60s"));
+        assert!(error_msg.contains("65s"));
+    }
+
+    #[test]
+    fn test_addr_reason_retry_exhausted() {
+        let reason = AddrReason::RetryExhausted {
+            attempts: 5,
+            last_error: "connection failed".to_string(),
+        };
+        assert_eq!(reason.error_code(), 504);
+        let error_msg = reason.to_string();
+        assert!(error_msg.contains("5 attempts"));
+        assert!(error_msg.contains("connection failed"));
+    }
+}

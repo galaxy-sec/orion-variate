@@ -219,4 +219,185 @@ mod tests {
         assert_eq!(HttpMethod::Post.to_string(), "POST");
         assert_eq!(HttpMethod::Patch.to_string(), "PATCH");
     }
+
+    #[test]
+    fn test_http_method_default() {
+        let method = HttpMethod::default();
+        assert_eq!(method, HttpMethod::Put);
+    }
+
+    #[test]
+    fn test_http_method_clone() {
+        let original = HttpMethod::Post;
+        let cloned = original.clone();
+        assert_eq!(original, cloned);
+    }
+
+    #[test]
+    fn test_http_method_partial_eq() {
+        assert_eq!(HttpMethod::Put, HttpMethod::Put);
+        assert_ne!(HttpMethod::Put, HttpMethod::Post);
+        assert_ne!(HttpMethod::Post, HttpMethod::Patch);
+        assert_ne!(HttpMethod::Patch, HttpMethod::Put);
+    }
+
+    #[test]
+    fn test_upload_options_new() {
+        let options = UploadOptions::new();
+        assert_eq!(options.http_method(), &HttpMethod::Put);
+        assert!(!options.compression_enabled());
+        assert!(options.metadata_dict().is_empty());
+    }
+
+    #[test]
+    fn test_upload_options_default() {
+        let options = UploadOptions::default();
+        assert_eq!(options.http_method(), &HttpMethod::Put);
+        assert!(!options.compression_enabled());
+        assert!(options.metadata_dict().is_empty());
+    }
+
+    #[test]
+    fn test_upload_options_with_method() {
+        let options = UploadOptions::with_method(HttpMethod::Post);
+        assert_eq!(options.http_method(), &HttpMethod::Post);
+        assert!(!options.compression_enabled());
+        assert!(options.metadata_dict().is_empty());
+    }
+
+    #[test]
+    fn test_upload_options_method_setter() {
+        let options = UploadOptions::new().method(HttpMethod::Patch);
+        assert_eq!(options.http_method(), &HttpMethod::Patch);
+    }
+
+    #[test]
+    fn test_upload_options_compression() {
+        let options = UploadOptions::new().compression(true);
+        assert!(options.compression_enabled());
+
+        let options = options.compression(false);
+        assert!(!options.compression_enabled());
+    }
+
+    #[test]
+    fn test_upload_options_metadata() {
+        let options = UploadOptions::new()
+            .metadata("key1", "value1")
+            .metadata("key2", "value2");
+
+        let metadata = options.metadata_dict();
+        assert_eq!(metadata.len(), 2);
+        assert_eq!(
+            metadata.get("key1"),
+            Some(&ValueType::String("value1".to_string()))
+        );
+        assert_eq!(
+            metadata.get("key2"),
+            Some(&ValueType::String("value2".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_upload_options_for_test() {
+        let options = UploadOptions::for_test();
+        assert_eq!(options.http_method(), &HttpMethod::Put);
+        assert!(!options.compression_enabled());
+        assert!(options.metadata_dict().is_empty());
+    }
+
+    #[test]
+    fn test_upload_options_getters() {
+        let options = UploadOptions::new()
+            .method(HttpMethod::Post)
+            .compression(true)
+            .metadata("test", "value");
+
+        assert_eq!(options.http_method(), &HttpMethod::Post);
+        assert!(options.compression_enabled());
+        assert_eq!(options.metadata_dict().len(), 1);
+    }
+
+    #[test]
+    fn test_upload_options_clone() {
+        let original = UploadOptions::new()
+            .method(HttpMethod::Patch)
+            .compression(true)
+            .metadata("clone", "test");
+
+        let cloned = original.clone();
+        assert_eq!(original.http_method(), cloned.http_method());
+        assert_eq!(original.compression_enabled(), cloned.compression_enabled());
+        assert_eq!(original.metadata_dict(), cloned.metadata_dict());
+    }
+
+    #[test]
+    fn test_upload_options_debug() {
+        let options = UploadOptions::new()
+            .method(HttpMethod::Post)
+            .compression(true)
+            .metadata("debug", "test");
+
+        let debug_str = format!("{:?}", options);
+        assert!(debug_str.contains("UploadOptions"));
+        assert!(debug_str.contains("Post"));
+        assert!(debug_str.contains("true"));
+    }
+
+    #[test]
+    fn test_from_usize_value_dict() {
+        let mut metadata = ValueDict::new();
+        metadata.insert("test".to_string(), ValueType::String("value".to_string()));
+
+        let options: UploadOptions = (0, metadata.clone()).into();
+        assert_eq!(options.http_method(), &HttpMethod::Put);
+        assert_eq!(options.metadata_dict(), &metadata);
+
+        let options: UploadOptions = (1, metadata.clone()).into();
+        assert_eq!(options.http_method(), &HttpMethod::Post);
+
+        let options: UploadOptions = (2, metadata.clone()).into();
+        assert_eq!(options.http_method(), &HttpMethod::Patch);
+
+        let options: UploadOptions = (999, metadata.clone()).into();
+        assert_eq!(options.http_method(), &HttpMethod::Put); // 默认值
+    }
+
+    #[test]
+    fn test_from_download_options() {
+        // 注意：这里我们无法创建 DownloadOptions 实例，因为它在另一个模块中
+        // 但我们可以测试 From trait 的存在性
+        let _ = UploadOptions::from(crate::update::DownloadOptions::default());
+    }
+
+    #[test]
+    fn test_upload_options_builder_pattern() {
+        let options = UploadOptions::new()
+            .method(HttpMethod::Post)
+            .compression(true)
+            .metadata("author", "test")
+            .metadata("version", "1.0");
+
+        assert_eq!(options.http_method(), &HttpMethod::Post);
+        assert!(options.compression_enabled());
+        assert_eq!(options.metadata_dict().len(), 2);
+    }
+
+    #[test]
+    fn test_upload_options_chaining() {
+        let base = UploadOptions::new();
+        let options1 = base.clone().method(HttpMethod::Patch);
+        let options2 = base.clone().compression(true);
+        let options3 = base.clone().metadata("key", "value");
+
+        assert_eq!(options1.http_method(), &HttpMethod::Patch);
+        assert!(!options1.compression_enabled());
+
+        assert_eq!(options2.http_method(), &HttpMethod::Put);
+        assert!(options2.compression_enabled());
+
+        assert_eq!(options3.http_method(), &HttpMethod::Put);
+        assert!(!options3.compression_enabled());
+        assert_eq!(options3.metadata_dict().len(), 1);
+    }
 }
