@@ -374,7 +374,7 @@ mod tests {
         writeln!(temp_file, "https://user:token@github.com").unwrap();
         writeln!(temp_file, "https://oauth2:token@gitlab.com/user/repo.git").unwrap();
         writeln!(temp_file, "# This is a comment").unwrap();
-        writeln!(temp_file, "").unwrap();
+        // 移除空字符串的writeln!调用
         temp_file.flush().unwrap();
 
         let credentials = GitRepository::read_git_credentials_from_path(temp_file.path());

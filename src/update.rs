@@ -107,8 +107,29 @@ mod tests {
     fn test_keep_duration_debug() {
         // 测试KeepDuration的调试格式
         let duration = KeepDuration::DurProj;
-        let debug_str = format!("{:?}", duration);
+        let debug_str = format!("{duration:?}");
         assert!(debug_str.contains("DurProj"));
+    }
+
+    #[test]
+    fn test_update_scope_debug() {
+        // 测试UpdateScope的调试格式
+        let scope = UpdateScope::None;
+        let debug_str = format!("{scope:?}");
+        assert!(debug_str.contains("None"));
+
+        let scope = UpdateScope::RemoteCache;
+        let debug_str = format!("{scope:?}");
+        assert!(debug_str.contains("RemoteCache"));
+    }
+
+    #[test]
+    fn test_download_options_debug() {
+        // 测试DownloadOptions的调试格式
+        let options = DownloadOptions::new(UpdateScope::RemoteCache, ValueDict::default());
+        let debug_str = format!("{options:?}");
+        assert!(debug_str.contains("DownloadOptions"));
+        assert!(debug_str.contains("RemoteCache"));
     }
 
     #[test]
@@ -136,18 +157,6 @@ mod tests {
         let scope = UpdateScope::RemoteCache;
         let cloned = scope.clone();
         assert_eq!(scope, cloned);
-    }
-
-    #[test]
-    fn test_update_scope_debug() {
-        // 测试UpdateScope的调试格式
-        let scope = UpdateScope::None;
-        let debug_str = format!("{:?}", scope);
-        assert!(debug_str.contains("None"));
-
-        let scope = UpdateScope::RemoteCache;
-        let debug_str = format!("{:?}", scope);
-        assert!(debug_str.contains("RemoteCache"));
     }
 
     #[test]
@@ -256,15 +265,6 @@ mod tests {
 
         assert_eq!(*options.scope_level(), *cloned.scope_level());
         assert_eq!(*options.values(), *cloned.values());
-    }
-
-    #[test]
-    fn test_download_options_debug() {
-        // 测试DownloadOptions的调试格式
-        let options = DownloadOptions::new(UpdateScope::RemoteCache, ValueDict::default());
-        let debug_str = format!("{:?}", options);
-        assert!(debug_str.contains("DownloadOptions"));
-        assert!(debug_str.contains("RemoteCache"));
     }
 
     #[test]

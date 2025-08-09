@@ -338,7 +338,7 @@ mod tests {
             .compression(true)
             .metadata("debug", "test");
 
-        let debug_str = format!("{:?}", options);
+        let debug_str = format!("{options:?}");
         assert!(debug_str.contains("UploadOptions"));
         assert!(debug_str.contains("Post"));
         assert!(debug_str.contains("true"));

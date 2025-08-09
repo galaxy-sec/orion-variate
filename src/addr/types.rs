@@ -160,9 +160,9 @@ mod tests {
         let http_address = Address::Http(HttpResource::from("https://example.com/file.txt"));
         let local_address = Address::Local(LocalPath::from("/local/path"));
 
-        assert_eq!(format!("{}", git_address), "git");
-        assert_eq!(format!("{}", http_address), "http");
-        assert_eq!(format!("{}", local_address), "local");
+        assert_eq!(format!("{git_address}"), "git");
+        assert_eq!(format!("{http_address}"), "http");
+        assert_eq!(format!("{local_address}"), "local");
     }
 
     #[test]
@@ -235,7 +235,7 @@ mod tests {
     #[test]
     fn test_addr_parse_error_display() {
         let error = AddrParseError::InvalidFormat("invalid format".to_string());
-        let error_str = format!("{}", error);
+        let error_str = format!("{error}");
         assert!(error_str.contains("invalid address format"));
         assert!(error_str.contains("invalid format"));
     }

@@ -93,7 +93,7 @@ mod tests {
     #[test]
     fn test_local_path_debug() {
         let local_path = LocalPath::from("/debug/path");
-        let debug_str = format!("{:?}", local_path);
+        let debug_str = format!("{local_path:?}");
         assert!(debug_str.contains("LocalPath"));
         assert!(debug_str.contains("/debug/path"));
     }

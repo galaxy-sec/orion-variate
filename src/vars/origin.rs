@@ -384,7 +384,7 @@ mod tests {
     #[test]
     fn test_origin_value_debug() {
         let origin_value = OriginValue::from("test_value").with_origin("test_origin");
-        let debug_str = format!("{:?}", origin_value);
+        let debug_str = format!("{origin_value:?}");
 
         assert!(debug_str.contains("OriginValue"));
         assert!(debug_str.contains("test_origin"));
@@ -396,7 +396,7 @@ mod tests {
         let mut dict = OriginDict::new();
         dict.insert("key1", ValueType::from("value1"));
 
-        let debug_str = format!("{:?}", dict);
+        let debug_str = format!("{dict:?}");
 
         assert!(debug_str.contains("OriginDict"));
         assert!(debug_str.contains("key1"));
