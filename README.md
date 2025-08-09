@@ -1,9 +1,8 @@
 # Orion Variate
 
-[![CI](https://github.com/your-username/orion-variate/workflows/CI/badge.svg)](https://github.com/your-username/orion-variate/actions)
+[![CI](https://github.com/galaxy-sec/orion-variate/workflows/CI/badge.svg)](https://github.com/galaxy-sec/orion-variate/actions)
 [![Coverage Status](https://coveralls.io/repos/github/galaxy-sec/orion-variate/badge.svg)](https://coveralls.io/github/galaxy-sec/orion-variate)
 [![crates.io](https://img.shields.io/crates/v/orion-variate.svg)](https://crates.io/crates/orion-variate)
-[![docs.rs](https://docs.rs/orion-variate/badge.svg)](https://docs.rs/orion-variate)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-blue.svg)](https://www.rust-lang.org)
 
