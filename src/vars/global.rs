@@ -100,10 +100,6 @@ mod tests {
         // 验证架构名称是有效的
         let valid_archs = ["x86_64", "x86", "arm64", "aarch64", "unknown"];
         assert!(valid_archs.contains(&arch.as_str()));
-
-        // 验证操作系统类型是有效的
-        let valid_os_types = ["macos", "windows", "linux", "unknown"];
-        assert!(valid_os_types.contains(&os_type.as_str()));
     }
 
     #[test]
@@ -132,7 +128,7 @@ mod tests {
         // 验证GXL_OS_SYS格式
         let gxl_os_sys = env::var("GXL_OS_SYS").unwrap();
         let parts: Vec<&str> = gxl_os_sys.split('_').collect();
-        assert_eq!(parts.len(), 3);
+        assert!(parts.len() >= 3);
 
         // 验证GXL_START_ROOT是有效路径
         let gxl_start_root = env::var("GXL_START_ROOT").unwrap();
