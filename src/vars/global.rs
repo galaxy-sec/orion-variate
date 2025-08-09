@@ -84,60 +84,171 @@ impl Drop for WorkDir {
 
 #[cfg(test)]
 mod tests {
-
+    use std::env;
     use tempfile::TempDir;
 
-    use crate::vars::global::{WorkDir, find_project_define};
+    use crate::vars::global::{
+        WorkDir, find_project_define, format_os_sys, get_os_info, setup_start_env_vars,
+    };
 
-    #[ignore = "change work dir"]
     #[test]
-    fn test_find_project_define_in_current_dir() {
-        // 创建临时目录
+    fn test_get_os_info() {
+        let (arch, os_type, _ver_major) = get_os_info();
+
+        // 验证返回的信息不为空
+        assert!(!arch.is_empty());
+        assert!(!os_type.is_empty());
+
+        // 验证架构名称是有效的
+        let valid_archs = vec!["x86_64", "x86", "arm64", "aarch64", "unknown"];
+        assert!(valid_archs.contains(&arch.as_str()));
+
+        // 验证操作系统类型是有效的
+        let valid_os_types = vec!["macos", "windows", "linux", "unknown"];
+        assert!(valid_os_types.contains(&os_type.as_str()));
+    }
+
+    #[test]
+    fn test_format_os_sys() {
+        let os_sys = format_os_sys();
+
+        // 验证格式化字符串不为空
+        assert!(!os_sys.is_empty());
+
+        // 验证格式符合预期: arch_os_vermajor
+        let parts: Vec<&str> = os_sys.split('_').collect();
+        assert_eq!(parts.len(), 3);
+
+        // 验证版本号是数字
+        assert!(parts[2].parse::<u64>().is_ok());
+    }
+
+    #[test]
+    fn test_setup_start_env_vars() {
+        // 保存原始环境变量
+        let original_gxl_os_sys = env::var("GXL_OS_SYS");
+        let original_gxl_start_root = env::var("GXL_START_ROOT");
+        let original_gxl_prj_root = env::var("GXL_PRJ_ROOT");
+
+        // 清理环境变量以确保测试准确性
+        unsafe {
+            env::remove_var("GXL_OS_SYS");
+            env::remove_var("GXL_START_ROOT");
+            env::remove_var("GXL_PRJ_ROOT");
+        }
+
+        // 调用函数设置环境变量
+        let result = setup_start_env_vars();
+        assert!(result.is_ok(), "setup_start_env_vars failed: {:?}", result);
+
+        // 验证环境变量已设置
+        assert!(env::var("GXL_OS_SYS").is_ok());
+        assert!(env::var("GXL_START_ROOT").is_ok());
+        assert!(env::var("GXL_PRJ_ROOT").is_ok());
+
+        // 验证GXL_OS_SYS格式
+        let gxl_os_sys = env::var("GXL_OS_SYS").unwrap();
+        let parts: Vec<&str> = gxl_os_sys.split('_').collect();
+        assert_eq!(parts.len(), 3);
+
+        // 验证GXL_START_ROOT是有效路径
+        let gxl_start_root = env::var("GXL_START_ROOT").unwrap();
+        assert!(std::path::Path::new(&gxl_start_root).exists());
+
+        // 恢复原始环境变量
+        unsafe {
+            if let Ok(val) = original_gxl_os_sys {
+                env::set_var("GXL_OS_SYS", val);
+            } else {
+                env::remove_var("GXL_OS_SYS");
+            }
+
+            if let Ok(val) = original_gxl_start_root {
+                env::set_var("GXL_START_ROOT", val);
+            } else {
+                env::remove_var("GXL_START_ROOT");
+            }
+
+            if let Ok(val) = original_gxl_prj_root {
+                env::set_var("GXL_PRJ_ROOT", val);
+            } else {
+                env::remove_var("GXL_PRJ_ROOT");
+            }
+        }
+    }
+
+    // 辅助函数：标准化路径比较，处理macOS上的/private前缀问题
+    fn normalize_path_for_comparison(path: &std::path::Path) -> std::path::PathBuf {
+        use std::path::Path;
+
+        let path_str = path.to_string_lossy();
+
+        // 如果路径以/private开头，移除这个前缀
+        if let Some(stripped) = path_str.strip_prefix("/private") {
+            Path::new(stripped).to_path_buf()
+        } else {
+            path.to_path_buf()
+        }
+    }
+
+    // 辅助函数：比较两个路径是否相等（考虑macOS路径标准化）
+    fn assert_paths_eq(path1: &std::path::Path, path2: &std::path::Path) {
+        let normalized1 = normalize_path_for_comparison(path1);
+        let normalized2 = normalize_path_for_comparison(path2);
+        assert_eq!(normalized1, normalized2, "Path comparison failed: {:?} vs {:?}", path1, path2);
+    }
+
+    #[test]
+    fn test_work_dir_with_relative_path() {
+        let original_dir = env::current_dir().expect("Failed to get current dir");
+        
+        {
+            // 使用相对路径创建WorkDir
+            let _work_dir = WorkDir::change(".").expect("Failed to change directory");
+            
+            // 验证工作目录仍然是当前目录
+            assert_paths_eq(&env::current_dir().unwrap(), &original_dir);
+        }
+        
+        // 验证工作目录已恢复
+        assert_paths_eq(&env::current_dir().unwrap(), &original_dir);
+    }
+
+    #[test]
+    fn test_work_dir_creation_and_restoration() {
+        let original_dir = env::current_dir().expect("Failed to get current dir");
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        
+        {
+            // 创建WorkDir实例，改变工作目录
+            let _work_dir = WorkDir::change(temp_dir.path()).expect("Failed to change directory");
+            
+            // 验证工作目录已改变
+            assert_paths_eq(&env::current_dir().unwrap(), temp_dir.path());
+        }
+        
+        // 验证工作目录已恢复
+        assert_paths_eq(&env::current_dir().unwrap(), &original_dir);
+    }
+
+    #[test]
+    fn test_find_project_define_with_deep_nesting() {
+        // 创建深层嵌套的目录结构
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let deep_dir = temp_dir.path().join("level1").join("level2").join("level3");
+        std::fs::create_dir_all(&deep_dir).expect("Failed to create deep directory structure");
+        
+        // 在根目录创建project.toml
         let gal_dir = temp_dir.path().join("_gal");
         std::fs::create_dir(&gal_dir).expect("Failed to create _gal dir");
         let project_file = gal_dir.join("project.toml");
         std::fs::write(&project_file, "").expect("Failed to create project.toml");
-
-        // 设置当前工作目录为临时目录
-        //env::set_current_dir(temp_dir.path()).expect("Failed to set current dir");
-        let _wd = WorkDir::change(temp_dir.path());
-
-        // 调用函数并断言结果
-        assert!(find_project_define().is_some())
-    }
-
-    #[ignore = "change work dir"]
-    #[test]
-    fn test_find_project_define_in_parent_dir() {
-        // 创建临时目录结构: temp_dir/child/_gal/project.toml
-        let temp_dir = TempDir::new().expect("Failed to create temp dir");
-        let child_dir = temp_dir.path().join("child");
-        std::fs::create_dir(&child_dir).expect("Failed to create child dir");
-        let gal_dir = temp_dir.path().join("_gal");
-        std::fs::create_dir(&gal_dir).expect("Failed to create _gal dir");
-        let project_file = gal_dir.join("project.toml");
-        std::fs::write(&project_file, "").expect("Failed to create project.toml");
-
-        // 设置当前工作目录为child_dir
-        let _wd = WorkDir::change(&child_dir);
-        //env::set_current_dir(&child_dir).expect("Failed to set current dir");
-
-        // 调用函数应找到父目录中的文件
-        assert!(find_project_define().is_some());
-    }
-
-    #[ignore = "change work dir"]
-    #[test]
-    fn test_find_project_define_not_found() {
-        // 创建临时目录，不创建_gal/project.toml
-        let temp_dir = TempDir::new().expect("Failed to create temp dir");
-
-        let _wd = WorkDir::change(temp_dir.path());
-        // 设置当前工作目录为临时目录
-        //env::set_current_dir(temp_dir.path()).expect("Failed to set current dir");
-
-        // 调用函数应返回None
-        assert_eq!(find_project_define(), None);
+        
+        // 在深层目录中查找
+        let _wd = WorkDir::change(&deep_dir).expect("Failed to change directory");
+        
+        let result = find_project_define();
+        assert!(result.is_some());
+        assert_paths_eq(&result.unwrap(), temp_dir.path());
     }
 }
