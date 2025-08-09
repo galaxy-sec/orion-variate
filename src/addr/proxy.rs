@@ -7,7 +7,7 @@ pub enum ProxyType {
     Socks5,
 }
 use serde_derive::{Deserialize, Serialize};
-#[derive(Clone, Debug, Getters, Serialize, Deserialize)]
+#[derive(Clone, Debug, Getters, Serialize, Deserialize, PartialEq, Eq)]
 #[getset(get = "pub")]
 pub struct ProxyConfig {
     url: String,

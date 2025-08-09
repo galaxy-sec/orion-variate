@@ -2,7 +2,6 @@
 
 pub mod addr;
 pub mod archive;
-pub mod ext;
 pub mod opt;
 mod predule;
 pub mod timeout;

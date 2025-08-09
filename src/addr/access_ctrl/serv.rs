@@ -17,7 +17,7 @@ use crate::{
     timeout::TimeoutConfig,
 };
 
-use super::{rule::Rule, unit::UnitCtrl};
+use super::{UnitCtrl, rule::Rule};
 use serde_derive::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize, Getters)]
