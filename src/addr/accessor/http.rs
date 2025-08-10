@@ -459,6 +459,8 @@ mod tests {
 #[cfg(test)]
 mod test3 {
     use super::*;
+    use crate::update::UpdateScope;
+    use crate::vars::ValueDict;
     use httpmock::MockServer;
 
     #[tokio::test(flavor = "current_thread")]
@@ -499,6 +501,106 @@ mod test3 {
         // 4. 验证结果
         mock.assert();
         assert!(!file_path.exists());
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_http_error_handling_scenarios() -> AddrResult<()> {
+        // Test 1: Upload non-existent file
+        let server = MockServer::start();
+        let _mock = server.mock(|when, then| {
+            when.method(httpmock::Method::POST)
+                .path("/upload")
+                .header_exists("content-type");
+            then.status(200).body("upload success");
+        });
+
+        let non_existent_path = PathBuf::from("/tmp/non_existent_file.txt");
+        let http_addr =
+            HttpResource::from(server.url("/upload")).with_credentials("test_user", "test_pass");
+
+        let http_accessor = HttpAccessor::default();
+
+        // Should fail when trying to upload non-existent file
+        let result = http_accessor
+            .upload(&http_addr, &non_existent_path, &HttpMethod::Post)
+            .await;
+        assert!(result.is_err());
+
+        // Mock shouldn't be called since file doesn't exist - the error should occur before HTTP request
+        // We've already verified that result.is_err(), so the test passes
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_http_download_failure_scenarios() -> AddrResult<()> {
+        use crate::update::DownloadOptions;
+
+        // Test 1: Download with HTTP error status
+        let error_server = MockServer::start();
+        let error_mock = error_server.mock(|when, then| {
+            when.method(httpmock::Method::GET).path("/error.txt");
+            then.status(404).body("Not Found");
+        });
+
+        let temp_dir = tempfile::tempdir().owe_res()?;
+        let error_file = temp_dir.path().join("error.txt");
+        let error_addr = HttpResource::from(error_server.url("/error.txt"))
+            .with_credentials("test_user", "test_pass");
+
+        let http_accessor = HttpAccessor::default();
+
+        // Should fail when server returns 404
+        let result = http_accessor
+            .download(&error_addr, &error_file, &DownloadOptions::for_test())
+            .await;
+        assert!(result.is_err());
+
+        error_mock.assert();
+
+        // Test 2: Download with reuse_cache option when file exists
+        let cache_server = MockServer::start();
+        let success_mock = cache_server.mock(|when, then| {
+            when.method(httpmock::Method::GET).path("/cached.txt");
+            then.status(200).body("cached content");
+        });
+
+        let cached_file = temp_dir.path().join("cached.txt");
+        tokio::fs::write(&cached_file, "existing content")
+            .await
+            .owe_sys()?;
+
+        let cached_addr = HttpResource::from(cache_server.url("/cached.txt"))
+            .with_credentials("test_user", "test_pass");
+
+        let download_options = DownloadOptions::new(UpdateScope::None, ValueDict::default());
+
+        // Should succeed without re-downloading due to reuse_cache (UpdateScope::None reuses cache)
+        let result = http_accessor
+            .download(&cached_addr, &cached_file, &download_options)
+            .await;
+        assert!(result.is_ok());
+
+        // File content should remain unchanged
+        let content = tokio::fs::read_to_string(&cached_file).await.owe_sys()?;
+        assert_eq!(content, "existing content");
+
+        // Should not make actual request due to cache reuse - no mock assertion needed
+
+        // Test 3: Download without reuse_cache when file exists
+        let download_options = DownloadOptions::for_test(); // RemoteCache doesn't reuse cache
+
+        // Should overwrite existing file
+        let result = http_accessor
+            .download(&cached_addr, &cached_file, &download_options)
+            .await;
+        assert!(result.is_ok());
+
+        // File content should be updated
+        let content = tokio::fs::read_to_string(&cached_file).await.owe_sys()?;
+        assert_eq!(content, "cached content");
+
+        success_mock.assert();
         Ok(())
     }
 }

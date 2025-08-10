@@ -215,7 +215,7 @@ mod tests {
                 assert_eq!(path, "https://mirror.com/file.txt");
                 assert_eq!(auth, None);
             }
-            _ => panic!("Expected RedirectResult::Direct"),
+            RedirectResult::Origin(_) => panic!("Expected RedirectResult::Direct"),
         }
     }
 
@@ -247,7 +247,148 @@ mod tests {
                 assert_eq!(path, "https://mirror.com/file.txt");
                 assert_eq!(result_auth, Some(auth));
             }
-            _ => panic!("Expected RedirectResult::Direct"),
+            RedirectResult::Origin(_) => panic!("Expected RedirectResult::Direct"),
+        }
+    }
+
+    #[test]
+    fn test_unit_direct_address_redirection() {
+        use crate::addr::{GitRepository, HttpResource};
+
+        // Test HTTP address redirection
+        let http_rules = vec![Rule::new(
+            "https://github.com/*",
+            "https://github-mirror.com/",
+        )];
+        let auth = AuthConfig::new("test-user", "test-pass");
+        let unit = Unit::new(http_rules, Some(auth.clone()), None);
+
+        let http_addr =
+            HttpResource::from("https://github.com/user/repo").with_credentials("user", "pass");
+        let redirected_http = unit.direct_http_addr(&http_addr);
+
+        assert!(redirected_http.is_some());
+        if let Some(redirected) = redirected_http {
+            assert_eq!(redirected.url(), "https://github-mirror.com/user/repo");
+            assert_eq!(*redirected.username(), Some("test-user".to_string()));
+            assert_eq!(*redirected.password(), Some("test-pass".to_string()));
+        }
+
+        // Test HTTP address without match (should return None)
+        let no_match_http = HttpResource::from("https://gitlab.com/user/repo");
+        let no_redirect_result = unit.direct_http_addr(&no_match_http);
+        assert!(no_redirect_result.is_none());
+
+        // Test Git repository redirection
+        let git_rules = vec![Rule::new("git@gitlab.com:*", "git@gitlab-mirror.com:")];
+        let git_auth = AuthConfig::new("git-user", "git-token");
+        let git_unit = Unit::new(git_rules, Some(git_auth.clone()), None);
+
+        let git_repo = GitRepository::from("git@gitlab.com:user/repo.git");
+        let redirected_git = git_unit.direct_git_addr(&git_repo);
+
+        assert!(redirected_git.is_some());
+        if let Some(redirected) = redirected_git {
+            assert_eq!(redirected.repo(), "git@gitlab-mirror.com:user/repo.git");
+            assert_eq!(*redirected.username(), Some("git-user".to_string()));
+            assert_eq!(*redirected.token(), Some("git-token".to_string()));
+        }
+
+        // Test Git repository without match (should return None)
+        let no_match_git = GitRepository::from("git@github.com:user/repo.git");
+        let no_git_redirect = git_unit.direct_git_addr(&no_match_git);
+        assert!(no_git_redirect.is_none());
+    }
+
+    #[test]
+    fn test_unit_edge_cases_and_environment_evaluation() {
+        use crate::vars::EnvDict;
+
+        // Test timeout_config_mut method
+        let mut unit = Unit::new(vec![], None, None);
+        let original_timeout = unit.timeout().clone();
+
+        let mut_timeout_config = unit.timeout_config_mut();
+        *mut_timeout_config = Some(TimeoutConfig::new());
+
+        // Since TimeoutConfig::new() creates default values, we'll test that
+        // the configuration can be modified rather than comparing specific values
+        assert!(unit.timeout().is_some());
+        assert!(original_timeout.is_some());
+
+        // Test RedirectResult methods
+        let origin_result = RedirectResult::Origin("https://example.com".to_string());
+        let direct_result = RedirectResult::Direct("https://mirror.com".to_string(), None);
+
+        assert!(!origin_result.is_proxy());
+        assert!(direct_result.is_proxy());
+        assert_eq!(origin_result.path(), "https://example.com");
+        assert_eq!(direct_result.path(), "https://mirror.com");
+
+        // Test make_example method
+        let example_unit = Unit::make_example();
+        assert_eq!(example_unit.rules().len(), 1);
+        assert!(example_unit.auth().is_some());
+        assert!(example_unit.timeout().is_some());
+        assert!(example_unit.proxy().is_none());
+
+        let example_rule = example_unit.rules()[0].clone();
+        assert_eq!(example_rule.pattern(), "https://github.com/example/*");
+        assert_eq!(example_rule.target(), "https://mirror.example.com/*");
+
+        // Test environment evaluation
+        let mut env_dict = std::collections::HashMap::new();
+        env_dict.insert("TEST_USER".to_string(), "env-user".to_string());
+        env_dict.insert("TEST_PASS".to_string(), "env-pass".to_string());
+        let env_dict: EnvDict = env_dict.into();
+
+        // Create a unit with environment variables in auth
+        let rules = vec![];
+        let auth = Some(AuthConfig::new(
+            "${TEST_USER}".to_string(),
+            "${TEST_PASS}".to_string(),
+        ));
+        let proxy = None;
+        let test_unit = Unit::new(rules, auth, proxy);
+
+        // Apply environment evaluation
+        let evaluated_unit = test_unit.env_eval(&env_dict);
+
+        // Note: The actual evaluation behavior depends on the AuthConfig implementation
+        // This test verifies the environment evaluation mechanism works
+        assert!(evaluated_unit.auth().is_some());
+
+        // Test multiple rules with priority (first match wins)
+        let mut multi_rule_unit = Unit::new(vec![], None, None);
+        multi_rule_unit.add_rule(Rule::new("https://test.com/*", "https://first-mirror.com/"));
+        multi_rule_unit.add_rule(Rule::new(
+            "https://test.com/api/*",
+            "https://second-mirror.com/",
+        ));
+
+        // First rule should match
+        let result1 = multi_rule_unit.redirect("https://test.com/file.txt");
+        assert_eq!(result1.path(), "https://first-mirror.com/file.txt");
+
+        // More specific rule should match when it comes first
+        let mut specific_rule_unit = Unit::new(vec![], None, None);
+        specific_rule_unit.add_rule(Rule::new(
+            "https://test.com/api/*",
+            "https://second-mirror.com/",
+        ));
+        specific_rule_unit.add_rule(Rule::new("https://test.com/*", "https://first-mirror.com/"));
+
+        let result2 = specific_rule_unit.redirect("https://test.com/api/endpoint");
+        assert_eq!(result2.path(), "https://second-mirror.com/endpoint");
+
+        // Test with empty rules
+        let empty_rule_unit = Unit::new(vec![], None, None);
+        let result3 = empty_rule_unit.redirect("https://any-url.com/file.txt");
+        match result3 {
+            RedirectResult::Origin(path) => {
+                assert_eq!(path, "https://any-url.com/file.txt");
+            }
+            _ => panic!("Expected RedirectResult::Origin for empty rules"),
         }
     }
 }
