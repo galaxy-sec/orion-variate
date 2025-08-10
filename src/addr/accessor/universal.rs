@@ -44,6 +44,33 @@ impl UniversalConfig {
     }
 }
 
+#[cfg(test)]
+mod config_tests {
+    use super::*;
+
+    #[test]
+    fn test_universal_config_builder_pattern() {
+        let net_ctrl = NetAccessCtrl::new(vec![], true);
+
+        let config = UniversalConfig::default().with_ctrl(net_ctrl);
+
+        assert!(config.accs_ctrl.is_some());
+    }
+
+    #[test]
+    fn test_universal_config_file_handling() {
+        let test_path = PathBuf::from("nonexistent_config.yml");
+        let none_path: Option<PathBuf> = None;
+
+        let config_with_none = UniversalConfig::default().with_file_opt(&none_path);
+        assert!(config_with_none.accs_ctrl.is_none());
+
+        let config_with_path = UniversalConfig::default().with_file_opt(&Some(test_path));
+        // File doesn't exist, so accs_ctrl should remain None
+        assert!(config_with_path.accs_ctrl.is_none());
+    }
+}
+
 /// 统一地址访问器
 ///
 /// 提供统一的地址访问接口，根据地址类型自动选择合适的底层访问器

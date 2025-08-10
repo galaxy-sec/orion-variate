@@ -14,7 +14,7 @@ use super::{
 
 const PROTECTED_BEG: &str = "!<!";
 const PROTECTED_END: &str = "!>!";
-#[derive(Debug, Clone, Getters)]
+#[derive(Debug, Clone, PartialEq, Getters)]
 pub struct LabelCoverter {
     orion_label_beg: String,
     orion_label_end: String,
