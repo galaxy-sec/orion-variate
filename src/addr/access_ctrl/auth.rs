@@ -71,4 +71,29 @@ mod tests {
         assert_eq!(evaluated.username(), "default_user");
         assert_eq!(evaluated.password(), "default_pass");
     }
+
+    #[test]
+    fn test_auth_config_make_example() {
+        let example = AuthConfig::make_example();
+
+        assert_eq!(example.username(), "galaxy");
+        assert_eq!(example.password(), "this-is-password");
+    }
+
+    #[test]
+    fn test_auth_config_mixed_env_eval() {
+        use crate::vars::{EnvDict, ValueType};
+
+        let mut env_dict = EnvDict::new();
+        env_dict.insert(
+            "USERNAME".to_string(),
+            ValueType::String("found_user".to_string()),
+        );
+
+        let auth = AuthConfig::new("${USERNAME}", "${MISSING_PASS:default_pass}");
+        let evaluated = auth.env_eval(&env_dict);
+
+        assert_eq!(evaluated.username(), "found_user");
+        assert_eq!(evaluated.password(), "default_pass");
+    }
 }
