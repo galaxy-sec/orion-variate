@@ -280,7 +280,7 @@ impl ResourceDownloader for GitAccessor {
         };
         let name = self.get_local_repo_name(addr);
         let cache_local = home_dir()
-            .ok_or(StructError::from_res("unget home".into()))?
+            .ok_or(AddrReason::from_res("unget home".into()).to_err())?
             .join(".cache/galaxy");
         ensure_path(&cache_local).owe_logic()?;
         let mut git_local = cache_local.join(name.clone());
@@ -359,7 +359,7 @@ impl ResourceUploader for GitAccessor {
     ) -> AddrResult<UpdateUnit> {
         let ctx = WithContext::want("upload to repository");
         if !path.exists() {
-            return Err(StructError::from_res("path not exist".into()));
+            return Err(AddrReason::from_res("path not exist".into()).to_err());
         }
         let temp_path = home_dir().unwrap_or(PathBuf::from("~/")).join(".temp");
         ensure_path(&temp_path).owe_logic()?;

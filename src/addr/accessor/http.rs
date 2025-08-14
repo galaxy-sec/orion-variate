@@ -1,3 +1,4 @@
+
 use crate::{
     addr::{
         AddrReason, AddrResult, Address, HttpResource, access_ctrl::serv::NetAccessCtrl,
@@ -85,9 +86,9 @@ impl HttpAccessor {
                 client.put(addr.url()).body(file_content)
             }
             _ => {
-                return Err(StructError::from_res(format!(
+                return Err(AddrReason::from_res(format!(
                     "Unsupported HTTP method: {method}",
-                )));
+                )).to_err());
             }
         };
 
@@ -153,10 +154,10 @@ impl HttpAccessor {
         let mut response = request.send().await.owe_res().with(&ctx)?;
 
         if !response.status().is_success() {
-            return Err(StructError::from_res(format!(
+            return Err(AddrReason::from_res(format!(
                 "HTTP request failed: {}",
                 response.status()
-            )))
+            )).to_err())
             .with(&ctx);
         }
 
@@ -250,7 +251,7 @@ impl ResourceUploader for HttpAccessor {
     ) -> AddrResult<UpdateUnit> {
         let _ = options; // Suppress unused variable warning for now
         if !path.exists() {
-            return Err(StructError::from_res("path not exist".into()));
+            return Err(AddrReason::from_res("path not exist".into()).to_err());
         }
         match addr {
             Address::Http(http) => {

@@ -87,7 +87,7 @@ impl ResourceUploader for LocalAccessor {
             _ => return Err(AddrReason::Brief(format!("addr type error {addr}")).to_err()),
         };
         if !path.exists() {
-            return Err(StructError::from_res("path not exist".into()));
+            return Err(AddrReason::from_res("path not exist".into()).to_err());
         }
         if path.is_file() {
             let file_name = path
@@ -110,7 +110,7 @@ pub fn path_file_name(path: &Path) -> AddrResult<String> {
     let file_name = path
         .file_name()
         .and_then(|f| f.to_str())
-        .ok_or(StructError::from_conf("get file_name error".to_string()))?;
+        .ok_or(AddrReason::from_conf("get file_name error".to_string()).to_err())?;
     Ok(file_name.to_string())
 }
 #[debug_requires(local.exists(), "local need exists")]
@@ -119,7 +119,7 @@ pub fn rename_path(local: &Path, name: &str) -> AddrResult<PathBuf> {
     let dst_path = local
         .parent()
         .map(|x| x.join(name))
-        .ok_or(StructError::from_conf("bad path".to_string()))?;
+        .ok_or(AddrReason::from_conf("bad path".to_string()).to_err())?;
 
     let dst_copy = dst_path.clone();
     let mut flag = auto_exit_log!(

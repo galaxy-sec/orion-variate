@@ -2,11 +2,16 @@
 name = "orion_variate"
 authors = ["wukong<sec-wukong@outlook.com>"]
 edition = "2024"
-version = "0.6.2"
+version = "0.7.0"
 
 [dependencies]
-orion_common = { git = "https://github.com/galaxy-sec/orion-common.git", branch = "main" }
-orion_infra = { git = "https://github.com/galaxy-sec/orion-infra", branch = "main" }
+orion_common = { git = "https://github.com/galaxy-sec/orion-common.git", tag= "v0.3.0" }
+orion_infra = { git = "https://github.com/galaxy-sec/orion-infra", tag= "v0.3.0" }
+orion-error= { git = "https://github.com/galaxy-sec/orion-error.git", tag= "v0.4.0" }
+#orion_infra = { path = "../orion_infra" }
+#orion_common = { path = "../orion_common" }
+#orion-error = { path = "../orion-error" }
+#orion-error = "0.3"
 env_logger = "~0.11"
 thiserror = "~2.0"
 log = "~0.4"
@@ -31,7 +36,6 @@ derive-getters = "0.5.0"
 indicatif = "~0.18"
 contracts = "~0.6"
 tracing = "~0.1"
-orion-error = "0.3"
 getset = "0.1.6"
 wildmatch = "~2.4"
 handlebars = "6.3"
