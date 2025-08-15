@@ -12,7 +12,6 @@ use getset::{Getters, WithSetters};
 use orion_error::{ToStructError, UvsResFrom};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use tokio::io::{AsyncWriteExt, BufReader};
 use tracing::{debug, info, instrument};
 
 use crate::types::ResourceUploader;
@@ -61,22 +60,17 @@ impl HttpAccessor {
             file_name = file_name,
             "upload started"
         );
-        // 异步打开文件并获取文件大小
-        let file = tokio::fs::File::open(file_path)
-            .await
-            .owe_sys()
-            .with(&ctx)?;
-        let file_metadata = file.metadata().await.owe_sys().with(&ctx)?;
-        let content_len = file_metadata.len();
+        // 同步读取文件内容以获得确切大小
+        let file_content = std::fs::read(file_path).owe_data().with(&ctx)?;
+        let content_len = file_content.len() as u64;
 
         // 创建原子计数器用于进度追踪
         let uploaded_bytes = Arc::new(AtomicU64::new(0));
-        let uploaded_bytes_clone = uploaded_bytes.clone();
 
         debug!(
             target: "orion_variate::addr::http",
             file_size = content_len,
-            "local file opened for streaming"
+            "local file read"
         );
         // 创建进度条
         let pb = ProgressBar::new(content_len);
@@ -84,47 +78,32 @@ impl HttpAccessor {
             .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})").owe_logic()?
             .progress_chars("#>-"));
 
-        // 分块读取文件内容进行流式上传
-        let mut reader = BufReader::new(file);
-        let mut buffer = vec![0u8; 8192];
-        let mut file_content = Vec::new();
-
-        // 启动异步进度更新任务
-        let pb_clone = pb.clone();
-        let progress_handle = tokio::spawn(async move {
-            let mut last_position = 0;
-            while last_position < content_len {
-                let current_position = uploaded_bytes_clone.load(Ordering::Relaxed);
-                if current_position > last_position {
-                    pb_clone.set_position(current_position);
-                    last_position = current_position;
-                }
-                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-            }
-        });
-
-        // 分块读取文件，同时更新进度
-        loop {
-            use tokio::io::AsyncReadExt;
-            let bytes_read = reader.read(&mut buffer).await.owe_sys().with(&ctx)?;
-            if bytes_read == 0 {
-                break;
-            }
-            file_content.extend_from_slice(&buffer[..bytes_read]);
-            uploaded_bytes.fetch_add(bytes_read as u64, Ordering::Relaxed);
-        }
-
         ctx.with("url", addr.url());
-        let mut request = match method {
+
+        // 创建请求
+        let request = match method {
             HttpMethod::Post => {
-                // 简单的Post方法
-                let part = reqwest::multipart::Part::bytes(file_content).file_name(file_name);
+                // Post方法
+                let part = reqwest::multipart::Part::bytes(file_content.clone())
+                    .file_name(file_name.clone());
                 let form = reqwest::multipart::Form::new().part("file", part);
-                client.post(addr.url()).multipart(form)
+                let mut request = client.post(addr.url()).multipart(form);
+
+                // 添加认证信息
+                if let (Some(u), Some(p)) = (addr.username(), addr.password()) {
+                    request = request.basic_auth(u, Some(p));
+                }
+                request
             }
             HttpMethod::Put => {
-                // 简化的PUT方法
-                client.put(addr.url()).body(file_content)
+                // PUT方法
+                let mut request = client.put(addr.url()).body(file_content.clone());
+
+                // 添加认证信息
+                if let (Some(u), Some(p)) = (addr.username(), addr.password()) {
+                    request = request.basic_auth(u, Some(p));
+                }
+                request
             }
             _ => {
                 return Err(
@@ -136,9 +115,28 @@ impl HttpAccessor {
         // 在开始发送请求时更新进度条
         pb.set_position(0);
 
-        if let (Some(u), Some(p)) = (addr.username(), addr.password()) {
-            request = request.basic_auth(u, Some(p));
-        }
+        // 启动异步进度更新任务 - 模拟上传进度
+        let pb_clone = pb.clone();
+        let uploaded_bytes_clone = uploaded_bytes.clone();
+        let progress_handle = tokio::spawn(async move {
+            let mut last_position = 0;
+            while last_position < content_len {
+                // 模拟上传进度 - 每100ms增加一些字节
+                let increment = (content_len / 100).max(1); // 每次增加1%
+                let target_position = last_position + increment;
+                if target_position >= content_len {
+                    uploaded_bytes_clone.store(content_len, Ordering::Relaxed);
+                    pb_clone.set_position(content_len);
+                    break;
+                }
+                uploaded_bytes_clone.store(target_position, Ordering::Relaxed);
+                pb_clone.set_position(target_position);
+                last_position = target_position;
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            }
+        });
+        // 在开始发送请求时更新进度条
+        pb.set_position(0);
 
         debug!(
             target: "orion_variate::addr::http",
@@ -148,11 +146,13 @@ impl HttpAccessor {
         let response = request.send().await.owe_res().with(&ctx)?;
         response.error_for_status().owe_res().with(&ctx)?;
 
+        // 上传完成，确保进度条完成到100%
+        uploaded_bytes.store(content_len, Ordering::Relaxed);
+        pb.set_position(content_len);
+
         // 等待进度监控任务完成
         progress_handle.await.owe_logic()?;
 
-        // 确保进度条完成到100%
-        pb.set_position(content_len);
         pb.finish_with_message("上传完成");
         info!("upload completed");
         Ok(())
@@ -166,6 +166,7 @@ impl HttpAccessor {
             dest_path = %dest_path.display(),
             cache_reuse = options.reuse_cache(),
         ),
+        err(Debug),
     )]
     pub async fn download(
         &self,
@@ -174,6 +175,7 @@ impl HttpAccessor {
         options: &DownloadOptions,
     ) -> AddrResult<PathBuf> {
         use indicatif::{ProgressBar, ProgressStyle};
+        use tokio::io::AsyncWriteExt;
         let addr = if let Some(direct_serv) = &self.ctrl {
             direct_serv.direct_http_addr(addr.clone())
         } else {
