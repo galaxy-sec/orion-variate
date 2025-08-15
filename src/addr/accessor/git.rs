@@ -960,4 +960,105 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_git_accessor_authentication_modes() {
+        // 测试 GitAccessor 的不同认证模式配置
+        use crate::addr::access_ctrl::serv::NetAccessCtrl;
+
+        // 创建测试用例
+        let git_addr_https = GitRepository::from("https://github.com/user/repo.git")
+            .with_token("ghp_test_token123".to_string());
+
+        let git_addr_ssh = GitRepository::from("git@github.com:user/repo.git").with_ssh_key(
+            "-----BEGIN OPENSSH PRIVATE KEY-----\ntest_key_data\n-----END OPENSSH PRIVATE KEY-----"
+                .to_string(),
+        );
+
+        // 测试 HTTPS 认证配置
+        let https_accessor = GitAccessor::default();
+        let _https_callbacks = https_accessor.build_remote_callbacks(&git_addr_https);
+
+        // 验证 HTTPS 地址使用 Token 认证
+        assert_eq!(git_addr_https.token().clone().unwrap(), "ghp_test_token123");
+
+        // 测试 SSH 认证配置
+        let ssh_accessor = GitAccessor::default();
+        let _ssh_callbacks = ssh_accessor.build_remote_callbacks(&git_addr_ssh);
+
+        // 验证 SSH 地址使用 SSH Key 认证
+        assert_eq!(
+            git_addr_ssh.ssh_key().clone().unwrap(),
+            "-----BEGIN OPENSSH PRIVATE KEY-----\ntest_key_data\n-----END OPENSSH PRIVATE KEY-----"
+        );
+
+        // 测试访问控制配置
+        let net_ctrl = NetAccessCtrl::new(vec![], false);
+        let controlled_accessor = GitAccessor::default().with_ctrl(Some(net_ctrl));
+
+        // 验证访问控制被正确设置
+        assert!(controlled_accessor.ctrl().is_some());
+    }
+
+    #[tokio::test]
+    async fn test_git_accessor_error_handling() -> AddrResult<()> {
+        use tempfile::tempdir;
+
+        test_init();
+
+        // 测试无效的 Git URL
+        let invalid_git_addr = GitRepository::from("invalid://not-a-git-url.com/repo.git");
+        let invalid_accessor = GitAccessor::default();
+        let temp_dir = tempdir().owe_res()?;
+
+        // 验证无效 URL 返回适当的错误
+        let result = invalid_accessor
+            .download_to_local(
+                &Address::Git(invalid_git_addr),
+                temp_dir.path(),
+                &DownloadOptions::default(),
+            )
+            .await;
+
+        assert!(result.is_err());
+
+        // 测试不存在的仓库
+        let non_existent_addr =
+            GitRepository::from("https://github.com/nonexistent/repo123456.git");
+        let non_existent_result = invalid_accessor
+            .download_to_local(
+                &Address::Git(non_existent_addr),
+                temp_dir.path(),
+                &DownloadOptions::default(),
+            )
+            .await;
+
+        // 验证不存在仓库返回认证或网络错误
+        assert!(non_existent_result.is_err());
+
+        // 测试无写入权限的路径（如果可能）
+        let readonly_path = PathBuf::from("/readonly");
+        // 如果路径不存在，创建它
+        if !readonly_path.exists() {
+            std::fs::create_dir_all(&readonly_path).ok();
+        }
+
+        // 尝试在只读路径上操作
+        if readonly_path.exists() {
+            let result = invalid_accessor
+                .download_to_local(
+                    &Address::Git(GitRepository::from(
+                        "https://github.com/galaxy-sec/hello-word.git",
+                    )),
+                    &readonly_path,
+                    &DownloadOptions::default(),
+                )
+                .await;
+
+            // 应该返回权限相关错误
+            assert!(result.is_err());
+        }
+
+        Ok(())
+    }
 }

@@ -8,7 +8,7 @@ use super::TplResult;
 mod rust;
 mod yml;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum CommentFmt {
     CStyle,
     Yml,

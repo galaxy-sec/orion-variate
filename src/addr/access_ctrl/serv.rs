@@ -20,7 +20,7 @@ use crate::{
 use super::{UnitCtrl, rule::Rule};
 use serde_derive::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Serialize, Deserialize, Getters)]
+#[derive(Clone, Debug, Serialize, Deserialize, Getters, PartialEq)]
 #[getset(get = "pub")]
 pub struct NetAccessCtrl {
     units: Vec<Unit>,
