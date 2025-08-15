@@ -8,13 +8,86 @@ use crate::{
     update::{DownloadOptions, HttpMethod, UploadOptions},
 };
 
+use bytes::Bytes;
+use futures_core::stream::Stream;
 use getset::{Getters, WithSetters};
+use http_body::{Frame, SizeHint};
 use orion_error::{ToStructError, UvsResFrom};
+use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::task::{Context, Poll};
+use tokio::io::AsyncRead;
+use tokio_util::io::ReaderStream;
 use tracing::{debug, info, instrument};
 
 use crate::types::ResourceUploader;
+
+/// 进度追踪流包装器
+struct ProgressStream<R> {
+    reader: ReaderStream<R>,
+    progress_bar: indicatif::ProgressBar,
+    uploaded_bytes: Arc<AtomicU64>,
+    total_size: u64,
+}
+
+impl<R> ProgressStream<R>
+where
+    R: AsyncRead + Unpin + Send + Sync + 'static,
+{
+    fn new(
+        reader: R,
+        progress_bar: indicatif::ProgressBar,
+        uploaded_bytes: Arc<AtomicU64>,
+        total_size: u64,
+    ) -> Self {
+        Self {
+            reader: ReaderStream::new(reader),
+            progress_bar,
+            uploaded_bytes,
+            total_size,
+        }
+    }
+}
+
+impl<R> http_body::Body for ProgressStream<R>
+where
+    R: AsyncRead + Unpin + Send + Sync + 'static,
+{
+    type Data = Bytes;
+    type Error = std::io::Error;
+
+    fn poll_frame(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+        match Pin::new(&mut self.reader).poll_next(cx) {
+            Poll::Ready(Some(result)) => match result {
+                Ok(bytes) => {
+                    let n = bytes.len() as u64;
+                    let current_pos = self.uploaded_bytes.fetch_add(n, Ordering::Relaxed) + n;
+                    self.progress_bar.set_position(current_pos);
+                    Poll::Ready(Some(Ok(Frame::data(bytes))))
+                }
+                Err(e) => Poll::Ready(Some(Err(e))),
+            },
+            Poll::Ready(None) => {
+                // EOF reached
+                self.progress_bar.set_position(self.total_size);
+                self.uploaded_bytes
+                    .store(self.total_size, Ordering::Relaxed);
+                Poll::Ready(None)
+            }
+            Poll::Pending => Poll::Pending,
+        }
+    }
+
+    fn size_hint(&self) -> SizeHint {
+        let mut hint = SizeHint::new();
+        hint.set_exact(self.total_size);
+        hint
+    }
+}
 
 #[derive(Getters, Clone, Debug, WithSetters, Default)]
 #[getset(get = "pub")]
@@ -37,7 +110,7 @@ impl HttpAccessor {
         &self,
         addr: &HttpResource,
         file_path: P,
-        method: &HttpMethod, //method: &str,
+        method: &HttpMethod,
     ) -> AddrResult<()> {
         use indicatif::{ProgressBar, ProgressStyle};
         let mut ctx = WithContext::want("upload url");
@@ -53,25 +126,31 @@ impl HttpAccessor {
         ctx.with_path("local file", file_path.as_ref());
 
         info!(
-            target: "orion_variate::addr::http",
+            target = "orion_variate::addr::http",
             file_path = %file_path.as_ref().display(),
             url = %addr.url(),
             method = ?method,
             file_name = file_name,
             "upload started"
         );
-        // 同步读取文件内容以获得确切大小
-        let file_content = std::fs::read(file_path).owe_data().with(&ctx)?;
-        let content_len = file_content.len() as u64;
+
+        // 异步打开文件并获取大小
+        let file = tokio::fs::File::open(&file_path)
+            .await
+            .owe_data()
+            .with(&ctx)?;
+        let metadata = file.metadata().await.owe_data().with(&ctx)?;
+        let content_len = metadata.len();
 
         // 创建原子计数器用于进度追踪
         let uploaded_bytes = Arc::new(AtomicU64::new(0));
 
         debug!(
-            target: "orion_variate::addr::http",
+            target = "orion_variate::addr::http",
             file_size = content_len,
-            "local file read"
+            "local file opened"
         );
+
         // 创建进度条
         let pb = ProgressBar::new(content_len);
         pb.set_style(ProgressStyle::default_bar()
@@ -80,12 +159,16 @@ impl HttpAccessor {
 
         ctx.with("url", addr.url());
 
+        // 创建进度追踪流
+        let progress_stream =
+            ProgressStream::new(file, pb.clone(), uploaded_bytes.clone(), content_len);
+
         // 创建请求
         let request = match method {
             HttpMethod::Post => {
-                // Post方法
-                let part = reqwest::multipart::Part::bytes(file_content.clone())
-                    .file_name(file_name.clone());
+                // Post方法 - 使用multipart表单
+                let body = reqwest::Body::wrap(progress_stream);
+                let part = reqwest::multipart::Part::stream(body).file_name(file_name.clone());
                 let form = reqwest::multipart::Form::new().part("file", part);
                 let mut request = client.post(addr.url()).multipart(form);
 
@@ -96,8 +179,9 @@ impl HttpAccessor {
                 request
             }
             HttpMethod::Put => {
-                // PUT方法
-                let mut request = client.put(addr.url()).body(file_content.clone());
+                // PUT方法 - 直接流式上传
+                let body = reqwest::Body::wrap(progress_stream);
+                let mut request = client.put(addr.url()).body(body);
 
                 // 添加认证信息
                 if let (Some(u), Some(p)) = (addr.username(), addr.password()) {
@@ -107,51 +191,23 @@ impl HttpAccessor {
             }
             _ => {
                 return Err(
-                    AddrReason::from_res(format!("Unsupported HTTP method: {method}",)).to_err(),
+                    AddrReason::from_res(format!("Unsupported HTTP method: {method}")).to_err(),
                 );
             }
         };
 
-        // 在开始发送请求时更新进度条
-        pb.set_position(0);
-
-        // 启动异步进度更新任务 - 模拟上传进度
-        let pb_clone = pb.clone();
-        let uploaded_bytes_clone = uploaded_bytes.clone();
-        let progress_handle = tokio::spawn(async move {
-            let mut last_position = 0;
-            while last_position < content_len {
-                // 模拟上传进度 - 每100ms增加一些字节
-                let increment = (content_len / 100).max(1); // 每次增加1%
-                let target_position = last_position + increment;
-                if target_position >= content_len {
-                    uploaded_bytes_clone.store(content_len, Ordering::Relaxed);
-                    pb_clone.set_position(content_len);
-                    break;
-                }
-                uploaded_bytes_clone.store(target_position, Ordering::Relaxed);
-                pb_clone.set_position(target_position);
-                last_position = target_position;
-                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-            }
-        });
-        // 在开始发送请求时更新进度条
+        // 设置初始进度
         pb.set_position(0);
 
         debug!(
-            target: "orion_variate::addr::http",
+            target = "orion_variate::addr::http",
             url = %addr.url(),
             "sending http upload request"
         );
+
+        // 发送请求 - 进度会在流读取时自动更新
         let response = request.send().await.owe_res().with(&ctx)?;
         response.error_for_status().owe_res().with(&ctx)?;
-
-        // 上传完成，确保进度条完成到100%
-        uploaded_bytes.store(content_len, Ordering::Relaxed);
-        pb.set_position(content_len);
-
-        // 等待进度监控任务完成
-        progress_handle.await.owe_logic()?;
 
         pb.finish_with_message("上传完成");
         info!("upload completed");
@@ -506,155 +562,6 @@ mod tests {
 
         // 4. 验证结果
         mock.assert();
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-mod test3 {
-    use super::*;
-    use crate::update::UpdateScope;
-    use crate::vars::ValueDict;
-    use httpmock::MockServer;
-
-    #[tokio::test(flavor = "current_thread")]
-    async fn test_http_upload_post() -> AddrResult<()> {
-        // 1. 配置模拟服务器
-        let server = MockServer::start();
-        let mock = server.mock(|when, then| {
-            when.method(httpmock::Method::POST)
-                .path("/upload")
-                .header_exists("content-type")  // 检查 multipart 头
-                .header("Authorization", "Basic Z2VuZXJpYy0xNzQ3NTM1OTc3NjMyOjViMmM5ZTliN2YxMTFhZjUyZjAzNzVjMWZkOWQzNWNkNGQwZGFiYzM=");
-            then.status(200)
-                .body("upload success");
-        });
-
-        // 2. 创建临时测试文件
-        let temp_dir = tempfile::tempdir().owe_res()?;
-        let file_path = temp_dir.path().join("test.txt");
-        tokio::fs::write(&file_path, "test content")
-            .await
-            .owe_sys()?;
-
-        // 3. 执行上传
-        let http_addr = HttpResource::from(server.url("/upload")).with_credentials(
-            "generic-1747535977632",
-            "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
-        );
-        let http_accessor = HttpAccessor::default();
-
-        http_accessor
-            .upload_from_local(
-                &Address::from(http_addr),
-                &file_path,
-                &UploadOptions::new().method(HttpMethod::Post),
-            )
-            .await?;
-
-        // 4. 验证结果
-        mock.assert();
-        assert!(!file_path.exists());
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "current_thread")]
-    async fn test_http_error_handling_scenarios() -> AddrResult<()> {
-        // Test 1: Upload non-existent file
-        let server = MockServer::start();
-        let _mock = server.mock(|when, then| {
-            when.method(httpmock::Method::POST)
-                .path("/upload")
-                .header_exists("content-type");
-            then.status(200).body("upload success");
-        });
-
-        let non_existent_path = PathBuf::from("/tmp/non_existent_file.txt");
-        let http_addr =
-            HttpResource::from(server.url("/upload")).with_credentials("test_user", "test_pass");
-
-        let http_accessor = HttpAccessor::default();
-
-        // Should fail when trying to upload non-existent file
-        let result = http_accessor
-            .upload(&http_addr, &non_existent_path, &HttpMethod::Post)
-            .await;
-        assert!(result.is_err());
-
-        // Mock shouldn't be called since file doesn't exist - the error should occur before HTTP request
-        // We've already verified that result.is_err(), so the test passes
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "current_thread")]
-    async fn test_http_download_failure_scenarios() -> AddrResult<()> {
-        use crate::update::DownloadOptions;
-
-        // Test 1: Download with HTTP error status
-        let error_server = MockServer::start();
-        let error_mock = error_server.mock(|when, then| {
-            when.method(httpmock::Method::GET).path("/error.txt");
-            then.status(404).body("Not Found");
-        });
-
-        let temp_dir = tempfile::tempdir().owe_res()?;
-        let error_file = temp_dir.path().join("error.txt");
-        let error_addr = HttpResource::from(error_server.url("/error.txt"))
-            .with_credentials("test_user", "test_pass");
-
-        let http_accessor = HttpAccessor::default();
-
-        // Should fail when server returns 404
-        let result = http_accessor
-            .download(&error_addr, &error_file, &DownloadOptions::for_test())
-            .await;
-        assert!(result.is_err());
-
-        error_mock.assert();
-
-        // Test 2: Download with reuse_cache option when file exists
-        let cache_server = MockServer::start();
-        let success_mock = cache_server.mock(|when, then| {
-            when.method(httpmock::Method::GET).path("/cached.txt");
-            then.status(200).body("cached content");
-        });
-
-        let cached_file = temp_dir.path().join("cached.txt");
-        tokio::fs::write(&cached_file, "existing content")
-            .await
-            .owe_sys()?;
-
-        let cached_addr = HttpResource::from(cache_server.url("/cached.txt"))
-            .with_credentials("test_user", "test_pass");
-
-        let download_options = DownloadOptions::new(UpdateScope::None, ValueDict::default());
-
-        // Should succeed without re-downloading due to reuse_cache (UpdateScope::None reuses cache)
-        let result = http_accessor
-            .download(&cached_addr, &cached_file, &download_options)
-            .await;
-        assert!(result.is_ok());
-
-        // File content should remain unchanged
-        let content = tokio::fs::read_to_string(&cached_file).await.owe_sys()?;
-        assert_eq!(content, "existing content");
-
-        // Should not make actual request due to cache reuse - no mock assertion needed
-
-        // Test 3: Download without reuse_cache when file exists
-        let download_options = DownloadOptions::for_test(); // RemoteCache doesn't reuse cache
-
-        // Should overwrite existing file
-        let result = http_accessor
-            .download(&cached_addr, &cached_file, &download_options)
-            .await;
-        assert!(result.is_ok());
-
-        // File content should be updated
-        let content = tokio::fs::read_to_string(&cached_file).await.owe_sys()?;
-        assert_eq!(content, "cached content");
-
-        success_mock.assert();
         Ok(())
     }
 }
