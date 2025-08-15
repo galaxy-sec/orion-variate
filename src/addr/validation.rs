@@ -410,7 +410,7 @@ mod tests {
         for url in invalid_urls {
             let resource = HttpResource::from(url);
             let result = resource.validate();
-            assert!(result.is_err(), "URL {} should be invalid", url);
+            assert!(result.is_err(), "URL {url} should be invalid");
         }
 
         // Test URLs that parse as valid but aren't HTTP/HTTPS
@@ -423,8 +423,7 @@ mod tests {
             // even though they're not HTTP/HTTPS
             assert!(
                 resource.validate().is_ok(),
-                "URL {} should pass validation (parses as valid)",
-                url
+                "URL {url} should pass validation (parses as valid)",
             );
         }
 
@@ -439,7 +438,7 @@ mod tests {
 
         for url in edge_case_urls {
             let resource = HttpResource::from(url);
-            assert!(resource.validate().is_ok(), "URL {} should be valid", url);
+            assert!(resource.validate().is_ok(), "URL {url} should be valid");
         }
     }
 
@@ -475,11 +474,7 @@ mod tests {
 
         for path in valid_relative_paths {
             let local_path = LocalPath::from(path);
-            assert!(
-                local_path.validate().is_ok(),
-                "Path {} should be valid",
-                path
-            );
+            assert!(local_path.validate().is_ok(), "Path {path} should be valid",);
         }
 
         // Test absolute paths on different systems
@@ -495,11 +490,7 @@ mod tests {
 
         for path in absolute_paths {
             let local_path = LocalPath::from(path);
-            assert!(
-                local_path.validate().is_ok(),
-                "Path {} should be valid",
-                path
-            );
+            assert!(local_path.validate().is_ok(), "Path {path} should be valid",);
         }
 
         // Test empty path

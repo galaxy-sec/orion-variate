@@ -219,8 +219,8 @@ mod tests {
 
         // The result might fail due to implementation details, but we're testing the path selection
         match upload_result {
-            Ok(_) => {}                                             // Success
-            Err(e) => println!("Upload failed as expected: {}", e), // Expected in test environment
+            Ok(_) => {}                                           // Success
+            Err(e) => println!("Upload failed as expected: {e}"), // Expected in test environment
         }
     }
 }

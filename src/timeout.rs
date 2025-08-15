@@ -331,7 +331,7 @@ mod tests {
                 read_timeout: 60,
                 total_timeout: 300,
             };
-            let debug_str = format!("{:?}", config);
+            let debug_str = format!("{config:?}");
             assert!(debug_str.contains("connect_timeout: 30"));
             assert!(debug_str.contains("read_timeout: 60"));
             assert!(debug_str.contains("total_timeout: 300"));
@@ -526,7 +526,7 @@ mod tests {
             let mut tracker = ProgressTracker::new(Duration::from_secs(10));
             tracker.update(50, Some(100));
 
-            let debug_str = format!("{:?}", tracker);
+            let debug_str = format!("{tracker:?}");
             assert!(debug_str.contains("last_activity"));
             assert!(debug_str.contains("timeout_duration"));
             assert!(debug_str.contains("total_downloaded"));

@@ -369,7 +369,7 @@ other: {{ other_value }}
         #[test]
         fn test_cust_tmpl_label_debug_none() {
             let label = CustTmplLabel::None;
-            let debug_str = format!("{:?}", label);
+            let debug_str = format!("{label:?}");
             assert_eq!(debug_str, "None");
         }
 
@@ -380,7 +380,7 @@ other: {{ other_value }}
                 ("{%", "%}"), // target labels
             );
             let label = CustTmplLabel::Setting(converter);
-            let debug_str = format!("{:?}", label);
+            let debug_str = format!("{label:?}");
             assert!(debug_str.contains("Setting"));
             assert!(debug_str.contains("LabelCoverter"));
         }
@@ -609,9 +609,7 @@ function {{ name }}() {
                 let result = label.convert(&cfmt, code_string.clone());
                 assert!(
                     result.is_ok(),
-                    "Conversion failed for {:?} with code: {}",
-                    cfmt,
-                    code
+                    "Conversion failed for {cfmt:?} with code: {code}",
                 );
 
                 let result_str = result.unwrap();

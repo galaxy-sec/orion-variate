@@ -12,7 +12,7 @@ use getset::{Getters, WithSetters};
 use orion_error::{ToStructError, UvsResFrom};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncWriteExt, BufReader};
 use tracing::{debug, info, instrument};
 
 use crate::types::ResourceUploader;
