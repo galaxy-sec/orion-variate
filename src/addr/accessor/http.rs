@@ -76,13 +76,13 @@ impl HttpAccessor {
         ctx.with("url", addr.url());
         let mut request = match method {
             HttpMethod::Post => {
-                let part = reqwest::multipart::Part::stream_with_length(file_content, content_len)
-                    .file_name(file_name);
+                // 简单的Post方法，先不实现流式进度更新
+                let part = reqwest::multipart::Part::bytes(file_content).file_name(file_name);
                 let form = reqwest::multipart::Form::new().part("file", part);
                 client.post(addr.url()).multipart(form)
             }
             HttpMethod::Put => {
-                // PUT方法直接使用文件内容作为请求体，避免multipart额外头部
+                // 简化的PUT方法，先不实现流式进度更新
                 client.put(addr.url()).body(file_content)
             }
             _ => {
@@ -91,6 +91,9 @@ impl HttpAccessor {
                 )).to_err());
             }
         };
+
+        // 在开始发送请求时更新进度条
+        pb.set_position(0);
 
         if let (Some(u), Some(p)) = (addr.username(), addr.password()) {
             request = request.basic_auth(u, Some(p));
@@ -103,6 +106,8 @@ impl HttpAccessor {
         );
         let response = request.send().await.owe_res().with(&ctx)?;
         response.error_for_status().owe_res().with(&ctx)?;
+        // 在请求完成时更新进度条到100%
+        pb.set_position(content_len);
         pb.finish_with_message("上传完成");
         info!("upload completed");
         Ok(())

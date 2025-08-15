@@ -46,6 +46,7 @@ lazy_static = "~1.5"
 flexi_logger = "~0.31"
 tar = "~0.4"
 flate2 = "~1.1"
+
 #console = "~0.15"
 [dev-dependencies]
 rstest = "0.25"
