@@ -1,6 +1,6 @@
 pub use derive_getters::Getters;
 pub use log::{debug, error, info};
-pub use orion_error::{ErrorOwe, ErrorWith,  UvsConfFrom, WithContext};
+pub use orion_error::{ErrorOwe, ErrorWith, UvsConfFrom, WithContext};
 pub use serde_derive::{Deserialize, Serialize};
 
 pub use std::path::Path;

@@ -1,4 +1,3 @@
-
 use crate::{
     addr::{
         AddrReason, AddrResult, Address, HttpResource, access_ctrl::serv::NetAccessCtrl,
@@ -11,7 +10,9 @@ use crate::{
 
 use getset::{Getters, WithSetters};
 use orion_error::{ToStructError, UvsResFrom};
-use tokio::io::AsyncWriteExt;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
 use tracing::{debug, info, instrument};
 
 use crate::types::ResourceUploader;
@@ -60,35 +61,75 @@ impl HttpAccessor {
             file_name = file_name,
             "upload started"
         );
-        let file_content = std::fs::read(file_path).owe_data().with(&ctx)?;
+        // 异步打开文件并获取文件大小
+        let file = tokio::fs::File::open(file_path)
+            .await
+            .owe_sys()
+            .with(&ctx)?;
+        let file_metadata = file.metadata().await.owe_sys().with(&ctx)?;
+        let content_len = file_metadata.len();
+
+        // 创建原子计数器用于进度追踪
+        let uploaded_bytes = Arc::new(AtomicU64::new(0));
+        let uploaded_bytes_clone = uploaded_bytes.clone();
+
         debug!(
             target: "orion_variate::addr::http",
-            file_size = file_content.len(),
-            "local file read"
+            file_size = content_len,
+            "local file opened for streaming"
         );
         // 创建进度条
-        let content_len = file_content.len() as u64;
         let pb = ProgressBar::new(content_len);
         pb.set_style(ProgressStyle::default_bar()
             .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})").owe_logic()?
             .progress_chars("#>-"));
 
+        // 分块读取文件内容进行流式上传
+        let mut reader = BufReader::new(file);
+        let mut buffer = vec![0u8; 8192];
+        let mut file_content = Vec::new();
+
+        // 启动异步进度更新任务
+        let pb_clone = pb.clone();
+        let progress_handle = tokio::spawn(async move {
+            let mut last_position = 0;
+            while last_position < content_len {
+                let current_position = uploaded_bytes_clone.load(Ordering::Relaxed);
+                if current_position > last_position {
+                    pb_clone.set_position(current_position);
+                    last_position = current_position;
+                }
+                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+            }
+        });
+
+        // 分块读取文件，同时更新进度
+        loop {
+            use tokio::io::AsyncReadExt;
+            let bytes_read = reader.read(&mut buffer).await.owe_sys().with(&ctx)?;
+            if bytes_read == 0 {
+                break;
+            }
+            file_content.extend_from_slice(&buffer[..bytes_read]);
+            uploaded_bytes.fetch_add(bytes_read as u64, Ordering::Relaxed);
+        }
+
         ctx.with("url", addr.url());
         let mut request = match method {
             HttpMethod::Post => {
-                // 简单的Post方法，先不实现流式进度更新
+                // 简单的Post方法
                 let part = reqwest::multipart::Part::bytes(file_content).file_name(file_name);
                 let form = reqwest::multipart::Form::new().part("file", part);
                 client.post(addr.url()).multipart(form)
             }
             HttpMethod::Put => {
-                // 简化的PUT方法，先不实现流式进度更新
+                // 简化的PUT方法
                 client.put(addr.url()).body(file_content)
             }
             _ => {
-                return Err(AddrReason::from_res(format!(
-                    "Unsupported HTTP method: {method}",
-                )).to_err());
+                return Err(
+                    AddrReason::from_res(format!("Unsupported HTTP method: {method}",)).to_err(),
+                );
             }
         };
 
@@ -102,11 +143,15 @@ impl HttpAccessor {
         debug!(
             target: "orion_variate::addr::http",
             url = %addr.url(),
-            "sending http download request"
+            "sending http upload request"
         );
         let response = request.send().await.owe_res().with(&ctx)?;
         response.error_for_status().owe_res().with(&ctx)?;
-        // 在请求完成时更新进度条到100%
+
+        // 等待进度监控任务完成
+        progress_handle.await.owe_logic()?;
+
+        // 确保进度条完成到100%
         pb.set_position(content_len);
         pb.finish_with_message("上传完成");
         info!("upload completed");
@@ -162,7 +207,8 @@ impl HttpAccessor {
             return Err(AddrReason::from_res(format!(
                 "HTTP request failed: {}",
                 response.status()
-            )).to_err())
+            ))
+            .to_err())
             .with(&ctx);
         }
 
