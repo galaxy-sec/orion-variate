@@ -1,6 +1,9 @@
 use anyhow::{Context, Result};
+use indicatif::{ProgressBar, ProgressStyle};
+use std::collections::HashMap;
 use std::fs::File;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use walkdir::WalkDir;
 
 /// 基于 tar -xzf 算法实现的解压函数
 ///
@@ -42,9 +45,28 @@ pub fn decompress(archive_path: impl AsRef<Path>, output_dir: impl AsRef<Path>) 
 
 /// 压缩目录为 tar.gz 文件
 ///
+/// 该函数会显示一个进度条，展示压缩进度，包括：
+/// - 已处理的文件/目录数量
+/// - 总文件/目录数量
+/// - 预估剩余时间
+/// - 当前正在处理的文件路径
+///
 /// # 参数
 /// * `source_dir` - 要压缩的目录
 /// * `output_path` - 输出的 .tar.gz 文件路径
+///
+/// # 示例
+/// ```
+/// use orion_variate::archive::compress;
+///
+/// // 压缩目录并显示进度条
+/// // compress("/path/to/source", "/path/to/archive.tar.gz").unwrap();
+/// ```
+///
+/// # 注意事项
+/// - 会自动跳过隐藏文件和目录（以 . 开头的文件）
+/// - 进度条会在控制台实时更新
+/// - 压缩完成后会显示完成消息
 pub fn compress(source_dir: impl AsRef<Path>, output_path: impl AsRef<Path>) -> Result<()> {
     let source_dir = source_dir.as_ref();
     let output_path = output_path.as_ref();
@@ -53,6 +75,20 @@ pub fn compress(source_dir: impl AsRef<Path>, output_path: impl AsRef<Path>) -> 
     if !source_dir.exists() || !source_dir.is_dir() {
         anyhow::bail!("源目录不存在: {}", source_dir.display());
     }
+
+    // 统计要压缩的文件和目录总数
+    let file_count = count_files_in_directory(source_dir)?;
+
+    // 创建进度条
+    let pb = ProgressBar::new(file_count);
+    pb.set_style(
+        ProgressStyle::default_bar()
+            .template(
+                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
+            )
+            .unwrap()
+            .progress_chars("#>-"),
+    );
 
     // 创建输出文件
     let file = File::create(output_path)
@@ -64,13 +100,89 @@ pub fn compress(source_dir: impl AsRef<Path>, output_path: impl AsRef<Path>) -> 
     // 创建 tar 归档写入器
     let mut tar = tar::Builder::new(encoder);
 
-    // 递归添加目录内容
-    tar.append_dir_all(".", source_dir)
+    // 手动递归添加目录内容以显示进度
+    compress_with_progress(&mut tar, source_dir, &pb, &mut HashMap::new())
         .with_context(|| format!("添加目录到压缩文件失败: {}", source_dir.display()))?;
+
+    // 完成进度条
+    pb.finish_with_message("压缩完成");
 
     // 确保所有数据都写入完成
     tar.finish().with_context(|| "完成压缩文件写入失败")?;
 
+    Ok(())
+}
+
+/// 统计目录中的文件和目录总数
+fn count_files_in_directory(dir: &Path) -> Result<u64> {
+    let mut count = 0;
+    for entry in WalkDir::new(dir)
+        .into_iter()
+        .filter_entry(|e| !is_hidden(e))
+    {
+        let entry = entry.with_context(|| "遍历目录失败")?;
+        if entry.path() != dir {
+            // 排除根目录本身
+            count += 1;
+        }
+    }
+    Ok(count)
+}
+
+/// 检查文件或目录是否是隐藏的
+fn is_hidden(entry: &walkdir::DirEntry) -> bool {
+    entry
+        .file_name()
+        .to_str()
+        .map(|s| s.starts_with('.'))
+        .unwrap_or(false)
+}
+
+/// 带进度指示的压缩函数
+fn compress_with_progress(
+    tar: &mut tar::Builder<flate2::write::GzEncoder<File>>,
+    source_dir: &Path,
+    pb: &ProgressBar,
+    visited: &mut HashMap<PathBuf, bool>,
+) -> Result<()> {
+    for entry in WalkDir::new(source_dir)
+        .into_iter()
+        .filter_entry(|e| !is_hidden(e))
+    {
+        let entry = entry.with_context(|| "遍历目录失败")?;
+        let path = entry.path();
+
+        // 跳过根目录本身
+        if path == source_dir {
+            continue;
+        }
+
+        // 避免重复处理
+        if visited.contains_key(path) {
+            continue;
+        }
+        visited.insert(path.to_path_buf(), true);
+
+        let relative_path = path
+            .strip_prefix(source_dir)
+            .with_context(|| format!("计算相对路径失败: {}", path.display()))?;
+
+        if entry.file_type().is_file() {
+            // 添加文件
+            let mut file =
+                File::open(path).with_context(|| format!("无法打开文件: {}", path.display()))?;
+            tar.append_file(relative_path, &mut file)
+                .with_context(|| format!("添加文件失败: {}", path.display()))?;
+        } else if entry.file_type().is_dir() {
+            // 添加目录
+            tar.append_dir(relative_path, path)
+                .with_context(|| format!("添加目录失败: {}", path.display()))?;
+        }
+
+        // 更新进度条
+        pb.inc(1);
+        pb.set_message(format!("正在压缩: {}", relative_path.display()));
+    }
     Ok(())
 }
 
