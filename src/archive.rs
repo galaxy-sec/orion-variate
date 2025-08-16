@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::collections::HashMap;
 use std::fs::File;
+
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
@@ -46,10 +47,11 @@ pub fn decompress(archive_path: impl AsRef<Path>, output_dir: impl AsRef<Path>) 
 /// 压缩目录为 tar.gz 文件
 ///
 /// 该函数会显示一个进度条，展示压缩进度，包括：
-/// - 已处理的文件/目录数量
-/// - 总文件/目录数量
+/// - 已处理的字节数
+/// - 总字节数
+/// - 处理速度 (字节/秒)
 /// - 预估剩余时间
-/// - 当前正在处理的文件路径
+/// - 当前正在处理的文件路径和大小
 ///
 /// # 参数
 /// * `source_dir` - 要压缩的目录
@@ -67,6 +69,7 @@ pub fn decompress(archive_path: impl AsRef<Path>, output_dir: impl AsRef<Path>) 
 /// - 会自动跳过隐藏文件和目录（以 . 开头的文件）
 /// - 进度条会在控制台实时更新
 /// - 压缩完成后会显示完成消息
+/// - 进度基于数据量（字节）而非文件数量，更准确地反映实际工作量
 pub fn compress(source_dir: impl AsRef<Path>, output_path: impl AsRef<Path>) -> Result<()> {
     let source_dir = source_dir.as_ref();
     let output_path = output_path.as_ref();
@@ -76,19 +79,20 @@ pub fn compress(source_dir: impl AsRef<Path>, output_path: impl AsRef<Path>) -> 
         anyhow::bail!("源目录不存在: {}", source_dir.display());
     }
 
-    // 统计要压缩的文件和目录总数
-    let file_count = count_files_in_directory(source_dir)?;
+    // 统计要压缩的总数据量（字节）
+    let total_bytes = count_total_bytes_in_directory(source_dir)?;
 
     // 创建进度条
-    let pb = ProgressBar::new(file_count);
+    let pb = ProgressBar::new(total_bytes);
     pb.set_style(
         ProgressStyle::default_bar()
             .template(
-                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
+                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}) {eta} {msg}",
             )
             .unwrap()
             .progress_chars("#>-"),
     );
+    pb.set_message("准备压缩...");
 
     // 创建输出文件
     let file = File::create(output_path)
@@ -113,20 +117,33 @@ pub fn compress(source_dir: impl AsRef<Path>, output_path: impl AsRef<Path>) -> 
     Ok(())
 }
 
-/// 统计目录中的文件和目录总数
-fn count_files_in_directory(dir: &Path) -> Result<u64> {
-    let mut count = 0;
+/// 统计目录中的总字节数
+fn count_total_bytes_in_directory(dir: &Path) -> Result<u64> {
+    let mut total_bytes = 0;
     for entry in WalkDir::new(dir)
         .into_iter()
         .filter_entry(|e| !is_hidden(e))
     {
         let entry = entry.with_context(|| "遍历目录失败")?;
-        if entry.path() != dir {
-            // 排除根目录本身
-            count += 1;
+        let path = entry.path();
+
+        // 跳过根目录本身
+        if path == dir {
+            continue;
+        }
+
+        if entry.file_type().is_file() {
+            // 统计文件大小
+            let metadata = entry
+                .metadata()
+                .with_context(|| format!("获取文件元数据失败: {}", path.display()))?;
+            total_bytes += metadata.len();
+        } else if entry.file_type().is_dir() {
+            // 每个目录额外增加 1024 字节的权重
+            total_bytes += 1024;
         }
     }
-    Ok(count)
+    Ok(total_bytes)
 }
 
 /// 检查文件或目录是否是隐藏的
@@ -168,22 +185,52 @@ fn compress_with_progress(
             .with_context(|| format!("计算相对路径失败: {}", path.display()))?;
 
         if entry.file_type().is_file() {
-            // 添加文件
+            // 添加文件并更新进度
             let mut file =
                 File::open(path).with_context(|| format!("无法打开文件: {}", path.display()))?;
+            let metadata = file
+                .metadata()
+                .with_context(|| format!("获取文件元数据失败: {}", path.display()))?;
+            let file_size = metadata.len();
+
+            pb.set_message(format!(
+                "正在压缩: {} ({})",
+                relative_path.display(),
+                format_bytes(file_size)
+            ));
             tar.append_file(relative_path, &mut file)
                 .with_context(|| format!("添加文件失败: {}", path.display()))?;
+
+            // 更新进度 - 文件的实际字节数
+            pb.inc(file_size);
         } else if entry.file_type().is_dir() {
             // 添加目录
             tar.append_dir(relative_path, path)
                 .with_context(|| format!("添加目录失败: {}", path.display()))?;
-        }
 
-        // 更新进度条
-        pb.inc(1);
-        pb.set_message(format!("正在压缩: {}", relative_path.display()));
+            // 更新进度 - 目录的权重 (1024 字节)
+            pb.inc(1024);
+        }
     }
     Ok(())
+}
+
+/// 格式化字节大小为人类可读格式
+fn format_bytes(bytes: u64) -> String {
+    const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
+    let mut bytes = bytes as f64;
+    let mut unit_index = 0;
+
+    while bytes >= 1024.0 && unit_index < UNITS.len() - 1 {
+        bytes /= 1024.0;
+        unit_index += 1;
+    }
+
+    if unit_index == 0 {
+        format!("{} {}", bytes as u64, UNITS[unit_index])
+    } else {
+        format!("{:.1} {}", bytes, UNITS[unit_index])
+    }
 }
 
 #[cfg(test)]
