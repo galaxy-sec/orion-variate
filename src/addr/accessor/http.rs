@@ -358,19 +358,19 @@ impl ResourceUploader for HttpAccessor {
         path: &Path,
         options: &UploadOptions,
     ) -> AddrResult<UpdateUnit> {
-        let _ = options; // Suppress unused variable warning for now
         if !path.exists() {
             return Err(AddrReason::from_res("path not exist".into()).to_err());
         }
         match addr {
             Address::Http(http) => {
-                //TODO: use options.http_method
                 self.upload(http, path, options.http_method()).await?;
+                /*
                 if path.is_file() {
                     std::fs::remove_file(path).owe_res()?;
                 } else {
                     std::fs::remove_dir_all(path).owe_res()?;
                 }
+                */
                 Ok(UpdateUnit::from(path.to_path_buf()))
             }
             _ => Err(AddrReason::Brief(format!("addr type error {addr}")).to_err()),
