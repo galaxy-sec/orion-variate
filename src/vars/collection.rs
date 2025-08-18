@@ -21,7 +21,7 @@ impl VarCollection {
     pub fn value_dict(&self) -> ValueDict {
         let mut dict = ValueDict::new();
         for var in &self.vars {
-            dict.insert(var.name().to_string(), var.value()); // 可能需要 into() 转换
+            dict.insert(var.name().to_string(), var.value().clone()); // 可能需要 into() 转换
         }
         dict
     }
@@ -67,9 +67,9 @@ impl VarCollection {
     fn eval_import(self, dict: &mut ValueDict) -> Self {
         let mut vars = Vec::new();
         for v in self.vars {
-            let e_v = v.value().env_eval(dict);
+            let e_v = v.value().clone().env_eval(dict);
             dict.insert(v.name(), e_v.clone());
-            vars.push(VarDefinition::from((v.name(), e_v)));
+            vars.push(VarDefinition::from((v.name().as_str(), e_v)));
         }
         Self { vars }
     }
@@ -111,9 +111,9 @@ mod tests {
         // 验证结果
         assert_eq!(result.vars().len(), 2);
         assert_eq!(result.vars()[0].name(), "username");
-        assert_eq!(result.vars()[0].value(), ValueType::from("admin"));
+        assert_eq!(result.vars()[0].value().clone(), ValueType::from("admin"));
         assert_eq!(result.vars()[1].name(), "account");
-        assert_eq!(result.vars()[1].value(), ValueType::from("admin"));
+        assert_eq!(result.vars()[1].value().clone(), ValueType::from("admin"));
     }
 
     #[test]
@@ -135,7 +135,7 @@ mod tests {
         assert_eq!(merged.vars().len(), 4);
 
         // 验证变量顺序
-        let names: Vec<&str> = merged.vars().iter().map(|v| v.name()).collect();
+        let names: Vec<&str> = merged.vars().iter().map(|v| v.name().as_str()).collect();
         assert_eq!(names, vec!["a", "b", "c", "d"]);
 
         // 验证变量b被正确覆盖

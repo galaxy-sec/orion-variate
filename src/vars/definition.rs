@@ -1,33 +1,19 @@
+use getset::{Getters, WithSetters};
 use serde_derive::{Deserialize, Serialize};
 
 use super::ValueType;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Getters, WithSetters)]
+#[getset(get = "pub")]
 pub struct VarDefinition {
     name: String,
     value: ValueType,
+    #[getset(set_with = "pub")]
     #[serde(skip_serializing_if = "Option::is_none")]
     desp: Option<String>,
+    #[getset(set_with = "pub")]
     #[serde(skip_serializing_if = "Option::is_none")]
     immutable: Option<bool>,
-    //#[serde(skip_serializing_if = "Option::is_none")]
-    //constr: Option<ValueConstraint>,
-}
-impl VarDefinition {
-    pub fn value(&self) -> ValueType {
-        self.value.clone()
-    }
-
-    pub fn name(&self) -> &str {
-        self.name.as_str()
-    }
-    pub fn desp(&self) -> Option<&str> {
-        self.desp.as_deref()
-    }
-
-    pub fn immutable(&self) -> Option<bool> {
-        self.immutable
-    }
 }
 impl From<(&str, &str)> for VarDefinition {
     fn from(value: (&str, &str)) -> Self {
