@@ -15,6 +15,12 @@ pub struct VarDefinition {
     #[serde(skip_serializing_if = "Option::is_none")]
     immutable: Option<bool>,
 }
+impl VarDefinition {
+    pub fn is_mutable(&self) -> bool {
+        let immutable = self.immutable.clone().unwrap_or(false);
+        !immutable
+    }
+}
 impl From<(&str, &str)> for VarDefinition {
     fn from(value: (&str, &str)) -> Self {
         VarDefinition {
