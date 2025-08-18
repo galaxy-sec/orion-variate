@@ -1,25 +1,24 @@
+use getset::{Getters, WithSetters};
 use serde_derive::{Deserialize, Serialize};
 
 use super::ValueType;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Getters, WithSetters)]
+#[getset(get = "pub")]
 pub struct VarDefinition {
     name: String,
-    desp: Option<String>,
     value: ValueType,
-    //#[serde(skip_serializing_if = "Option::is_none")]
-    //constr: Option<ValueConstraint>,
+    #[getset(set_with = "pub")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    desp: Option<String>,
+    #[getset(set_with = "pub")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    immutable: Option<bool>,
 }
 impl VarDefinition {
-    pub fn value(&self) -> ValueType {
-        self.value.clone()
-    }
-
-    pub fn name(&self) -> &str {
-        self.name.as_str()
-    }
-    pub fn desp(&self) -> Option<&str> {
-        self.desp.as_deref()
+    pub fn is_mutable(&self) -> bool {
+        let immutable = self.immutable.unwrap_or(false);
+        !immutable
     }
 }
 impl From<(&str, &str)> for VarDefinition {
@@ -28,6 +27,7 @@ impl From<(&str, &str)> for VarDefinition {
             name: value.0.to_string(),
             desp: None,
             value: ValueType::from(value.1),
+            immutable: None,
         }
     }
 }
@@ -37,6 +37,7 @@ impl From<(&str, bool)> for VarDefinition {
             name: value.0.to_string(),
             desp: None,
             value: ValueType::from(value.1),
+            immutable: None,
         }
     }
 }
@@ -46,6 +47,7 @@ impl From<(&str, u64)> for VarDefinition {
             name: value.0.to_string(),
             desp: None,
             value: ValueType::from(value.1),
+            immutable: None,
         }
     }
 }
@@ -55,6 +57,7 @@ impl From<(&str, f64)> for VarDefinition {
             name: value.0.to_string(),
             desp: None,
             value: ValueType::from(value.1),
+            immutable: None,
         }
     }
 }
@@ -65,6 +68,7 @@ impl From<(&str, ValueType)> for VarDefinition {
             name: value.0.to_string(),
             desp: None,
             value: value.1,
+            immutable: None,
         }
     }
 }

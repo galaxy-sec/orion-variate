@@ -1,27 +1,35 @@
-use derive_getters::Getters;
 use derive_more::Deref;
+use getset::{Getters, WithSetters};
 use indexmap::IndexMap;
 use serde_derive::{Deserialize, Serialize};
 
-use super::{EnvDict, EnvEvalable, ValueDict, dict::ValueMap, types::ValueType};
+use super::{EnvDict, EnvEvalable, ValueDict, VarCollection, dict::ValueMap, types::ValueType};
 
 pub type OriginMap = IndexMap<String, OriginValue>;
 
 impl EnvEvalable<OriginMap> for OriginMap {
-    fn env_eval(self, edict: &EnvDict) -> OriginMap {
-        let mut origins = OriginMap::new();
+    fn env_eval(self, dict: &EnvDict) -> OriginMap {
+        let mut cur_dict = dict.clone();
+        let mut vmap = OriginMap::new();
         for (k, v) in self {
-            let e_v = v.env_eval(edict);
-            origins.insert(k, e_v);
+            let e_v = v.env_eval(&cur_dict);
+            if !cur_dict.contains_key(&k) {
+                cur_dict.insert(k.clone(), e_v.value.clone());
+            }
+            vmap.insert(k, e_v);
         }
-        origins
+        vmap
     }
 }
 
-#[derive(Getters, Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Getters, Clone, Debug, Serialize, Deserialize, PartialEq, WithSetters)]
+#[getset(get = "pub")]
 pub struct OriginValue {
     origin: Option<String>,
     value: ValueType,
+    #[getset(set_with = "pub")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    immutable: Option<bool>,
 }
 
 impl EnvEvalable<OriginValue> for OriginValue {
@@ -29,6 +37,7 @@ impl EnvEvalable<OriginValue> for OriginValue {
         Self {
             origin: self.origin,
             value: self.value.env_eval(dict),
+            immutable: self.immutable,
         }
     }
 }
@@ -37,12 +46,20 @@ impl EnvEvalable<OriginValue> for OriginValue {
 pub struct OriginDict {
     dict: OriginMap,
 }
+impl EnvEvalable<OriginDict> for OriginDict {
+    fn env_eval(self, dict: &EnvDict) -> OriginDict {
+        Self {
+            dict: self.dict.env_eval(dict),
+        }
+    }
+}
 
 impl From<ValueType> for OriginValue {
     fn from(value: ValueType) -> Self {
         Self {
-            origin: None,
             value,
+            origin: None,
+            immutable: None,
         }
     }
 }
@@ -51,6 +68,7 @@ impl From<&str> for OriginValue {
         Self {
             origin: None,
             value: ValueType::from(value),
+            immutable: None,
         }
     }
 }
@@ -59,6 +77,10 @@ impl OriginValue {
         self.origin = Some(origin.into());
         self
     }
+    pub fn is_mutable(&self) -> bool {
+        let immutable = self.immutable.unwrap_or(false);
+        !immutable
+    }
 }
 
 impl From<ValueDict> for OriginDict {
@@ -66,6 +88,18 @@ impl From<ValueDict> for OriginDict {
         let mut dict = OriginMap::new();
         for (k, v) in value.dict() {
             dict.insert(k.clone(), OriginValue::from(v.clone()));
+        }
+        Self { dict }
+    }
+}
+impl From<VarCollection> for OriginDict {
+    fn from(value: VarCollection) -> Self {
+        let mut dict = OriginMap::new();
+        for item in value.vars() {
+            dict.insert(
+                item.name().to_string(),
+                OriginValue::from(item.value().clone()).with_immutable(*item.immutable()),
+            );
         }
         Self { dict }
     }
@@ -90,7 +124,12 @@ impl OriginDict {
     }
     pub fn merge(&mut self, other: &Self) {
         for (k, v) in other.iter() {
-            if !self.contains_key(k) {
+            if let Some(x) = self.get(k) {
+                //replace orion value;
+                if x.is_mutable() {
+                    self.dict.insert(k.clone(), v.clone());
+                }
+            } else {
                 self.dict.insert(k.clone(), v.clone());
             }
         }
@@ -238,7 +277,7 @@ mod tests {
         );
         assert_eq!(
             dict1.get("key2").unwrap().value(),
-            &ValueType::from("value2")
+            &ValueType::from("new_value2")
         );
         assert_eq!(
             dict1.get("key3").unwrap().value(),
