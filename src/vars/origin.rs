@@ -1,9 +1,9 @@
-use derive_getters::Getters;
 use derive_more::Deref;
+use getset::{Getters, WithSetters};
 use indexmap::IndexMap;
 use serde_derive::{Deserialize, Serialize};
 
-use super::{EnvDict, EnvEvalable, ValueDict, dict::ValueMap, types::ValueType};
+use super::{EnvDict, EnvEvalable, ValueDict, VarCollection, dict::ValueMap, types::ValueType};
 
 pub type OriginMap = IndexMap<String, OriginValue>;
 
@@ -18,10 +18,14 @@ impl EnvEvalable<OriginMap> for OriginMap {
     }
 }
 
-#[derive(Getters, Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Getters, Clone, Debug, Serialize, Deserialize, PartialEq, WithSetters)]
+#[getset(get = "pub")]
 pub struct OriginValue {
     origin: Option<String>,
     value: ValueType,
+    #[getset(set_with = "pub")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    immutable: Option<bool>,
 }
 
 impl EnvEvalable<OriginValue> for OriginValue {
@@ -29,6 +33,7 @@ impl EnvEvalable<OriginValue> for OriginValue {
         Self {
             origin: self.origin,
             value: self.value.env_eval(dict),
+            immutable: self.immutable,
         }
     }
 }
@@ -41,8 +46,9 @@ pub struct OriginDict {
 impl From<ValueType> for OriginValue {
     fn from(value: ValueType) -> Self {
         Self {
-            origin: None,
             value,
+            origin: None,
+            immutable: None,
         }
     }
 }
@@ -51,6 +57,7 @@ impl From<&str> for OriginValue {
         Self {
             origin: None,
             value: ValueType::from(value),
+            immutable: None,
         }
     }
 }
@@ -66,6 +73,18 @@ impl From<ValueDict> for OriginDict {
         let mut dict = OriginMap::new();
         for (k, v) in value.dict() {
             dict.insert(k.clone(), OriginValue::from(v.clone()));
+        }
+        Self { dict }
+    }
+}
+impl From<VarCollection> for OriginDict {
+    fn from(value: VarCollection) -> Self {
+        let mut dict = OriginMap::new();
+        for item in value.vars() {
+            dict.insert(
+                item.name().to_string(),
+                OriginValue::from(item.value()).with_immutable(item.immutable()),
+            );
         }
         Self { dict }
     }
