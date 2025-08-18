@@ -17,7 +17,7 @@ pub struct VarDefinition {
 }
 impl VarDefinition {
     pub fn is_mutable(&self) -> bool {
-        let immutable = self.immutable.clone().unwrap_or(false);
+        let immutable = self.immutable.unwrap_or(false);
         !immutable
     }
 }

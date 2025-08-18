@@ -78,7 +78,7 @@ impl OriginValue {
         self
     }
     pub fn is_mutable(&self) -> bool {
-        let immutable = self.immutable.clone().unwrap_or(false);
+        let immutable = self.immutable.unwrap_or(false);
         !immutable
     }
 }
@@ -98,7 +98,7 @@ impl From<VarCollection> for OriginDict {
         for item in value.vars() {
             dict.insert(
                 item.name().to_string(),
-                OriginValue::from(item.value().clone()).with_immutable(item.immutable().clone()),
+                OriginValue::from(item.value().clone()).with_immutable(*item.immutable()),
             );
         }
         Self { dict }
