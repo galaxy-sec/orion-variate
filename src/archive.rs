@@ -282,21 +282,19 @@ fn decompress_with_progress<R: std::io::Read>(
     output_dir: &Path,
     pb: &ProgressBar,
 ) -> Result<()> {
-    let entries = archive
-        .entries()
-        .with_context(|| "无法读取归档条目")?;
+    let entries = archive.entries().with_context(|| "无法读取归档条目")?;
 
     // 遍历每个归档条目
     for entry in entries {
         let mut entry = entry.with_context(|| "无法读取归档条目")?;
-        
+
         // 获取文件路径和大小，避免借用冲突
         let path_display = {
             let path = entry.path().with_context(|| "无法获取条目路径")?;
             path.display().to_string()
         };
         let file_size = entry.size();
-        
+
         // 更新进度条消息，显示当前处理的文件
         pb.set_message(format!(
             "解压: {} ({})",
