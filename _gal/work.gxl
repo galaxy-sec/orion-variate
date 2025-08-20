@@ -1,4 +1,4 @@
-extern mod ver,git { git = "https://github.com/galaxy-operators/cfm-gxl.git", channel = "${GXL_CHANNEL:main}" }
+extern mod ver,git ,ai { git = "https://github.com/galaxy-operators/cfm-gxl.git", channel = "${GXL_CHANNEL:main}" }
 extern mod rust { path = "./_gal/mods";  }
 mod envs  {
    env _common  : rust_env.init   {
@@ -23,7 +23,7 @@ mod envs  {
   env default    : _common,debug;
 }
 
-mod main   {
+mod main   : ai {
       bld_bins = "target/${ENV_BUILD_NAME}" ;
       rls_bins = "target/release" ;
       prj_bins = "${ENV_ROOT}/bin" ;
