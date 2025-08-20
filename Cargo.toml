@@ -3,6 +3,11 @@ name = "orion_variate"
 authors = ["wukong<sec-wukong@outlook.com>"]
 edition = "2024"
 version = "0.7.8"
+description = "Variate for Large Project"
+license = "MIT"
+repository = "https://github.com/galaxy-sec/orion-variate"
+keywords = ["variate", "utilities"]
+categories = ["config"]
 
 [dependencies]
 orion_common = { git = "https://github.com/galaxy-sec/orion-common.git", tag = "v0.3.0" }
