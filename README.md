@@ -1,10 +1,9 @@
 # Orion Variate
 
 [![CI](https://github.com/galaxy-sec/orion-variate/workflows/CI/badge.svg)](https://github.com/galaxy-sec/orion-variate/actions)
-[![Coverage Status](https://codecov.io/gh/galaxy-sec/orion-error/branch/main/graph/badge.svg)](https://codecov.io/gh/galaxy-sec/orion-error)
+[![Coverage Status](https://codecov.io/gh/galaxy-sec/orion-variate/branch/main/graph/badge.svg)](https://codecov.io/gh/galaxy-sec/orion-variate)
 [![crates.io](https://img.shields.io/crates/v/orion-variate.svg)](https://crates.io/crates/orion-variate)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Rust](https://img.shields.io/badge/rust-1.70%2B-blue.svg)](https://www.rust-lang.org)
 
 一个Rust库，提供地址重定向、模板处理和变量扩展功能，专为现代开发工作流设计。
 
