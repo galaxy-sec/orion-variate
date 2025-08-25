@@ -1728,16 +1728,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "orion-error"
+version = "0.5.1"
+source = "git+https://github.com/galaxy-sec/orion-error.git?tag=v0.5.1#bd7b6323daa2e718a37c07e3e494e92f4bd4eb35"
+dependencies = [
+ "derive-getters",
+ "derive_more",
+ "log",
+ "serde",
+ "thiserror 2.0.15",
+]
+
+[[package]]
 name = "orion_common"
-version = "0.3.0"
-source = "git+https://github.com/galaxy-sec/orion-common.git?tag=v0.3.0#918ef5bd7676bc50d76004d452b55858b43f13fe"
+version = "0.3.1"
+source = "git+https://github.com/galaxy-sec/orion-common.git?tag=v0.3.1#9e971630396bba157ff69eb367a3ff73f2f2a220"
 dependencies = [
  "anyhow",
  "chrono",
  "derive-getters",
  "derive_more",
  "ipnet",
- "orion-error 0.4.0",
+ "orion-error 0.5.1",
  "serde",
  "serde_derive",
  "serde_ini",
