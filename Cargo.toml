@@ -11,7 +11,7 @@ categories = ["config"]
 
 [dependencies]
 orion_common = { git = "https://github.com/galaxy-sec/orion-common.git", tag = "v0.3.0" }
-orion_infra = { git = "https://github.com/galaxy-sec/orion-infra", tag = "v0.3.0" }
+orion_infra = { git = "https://github.com/galaxy-sec/orion-infra", tag = "v0.3.1" }
 orion-error = { git = "https://github.com/galaxy-sec/orion-error.git", tag = "v0.4.0" }
 #orion_infra = { path = "../orion_infra" }
 #orion_common = { path = "../orion_common" }
