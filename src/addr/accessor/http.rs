@@ -344,7 +344,7 @@ impl ResourceUploader for HttpAccessor {
         options: &UploadOptions,
     ) -> AddrResult<UpdateUnit> {
         if !path.exists() {
-            return Err(AddrReason::from_res("path not exist".into()).to_err());
+            return Err(AddrReason::from_res("path not exist").to_err());
         }
         match addr {
             Address::Http(http) => {

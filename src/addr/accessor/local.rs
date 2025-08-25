@@ -76,7 +76,7 @@ impl ResourceUploader for LocalAccessor {
             _ => return Err(AddrReason::Brief(format!("addr type error {addr}")).to_err()),
         };
         if !path.exists() {
-            return Err(AddrReason::from_res("path not exist".into()).to_err());
+            return Err(AddrReason::from_res("path not exist").to_err());
         }
         if path.is_file() {
             let file_name = path

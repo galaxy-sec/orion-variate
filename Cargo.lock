@@ -1707,6 +1707,17 @@ dependencies = [
 [[package]]
 name = "orion-error"
 version = "0.5.1"
+dependencies = [
+ "derive-getters",
+ "derive_more",
+ "log",
+ "serde",
+ "thiserror 2.0.15",
+]
+
+[[package]]
+name = "orion-error"
+version = "0.5.1"
 source = "git+https://github.com/galaxy-sec/orion-error.git?tag=v0.5.1#bd7b6323daa2e718a37c07e3e494e92f4bd4eb35"
 dependencies = [
  "derive-getters",
@@ -1726,7 +1737,7 @@ dependencies = [
  "derive-getters",
  "derive_more",
  "ipnet",
- "orion-error",
+ "orion-error 0.5.1 (git+https://github.com/galaxy-sec/orion-error.git?tag=v0.5.1)",
  "serde",
  "serde_derive",
  "serde_ini",
@@ -1746,7 +1757,7 @@ dependencies = [
  "derive_more",
  "flexi_logger",
  "log",
- "orion-error",
+ "orion-error 0.5.1 (git+https://github.com/galaxy-sec/orion-error.git?tag=v0.5.1)",
  "scopeguard",
  "serde",
  "serde_derive",
@@ -1779,7 +1790,7 @@ dependencies = [
  "indexmap",
  "indicatif",
  "log",
- "orion-error",
+ "orion-error 0.5.1",
  "orion_common",
  "orion_infra",
  "os_info",
