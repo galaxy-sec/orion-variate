@@ -3,8 +3,7 @@ use crate::update::{DownloadOptions, UploadOptions};
 use crate::{predule::*, types::ResourceDownloader};
 use contracts::debug_requires;
 use fs_extra::dir::CopyOptions;
-use orion_error::{ToStructError, UvsResFrom};
-use orion_infra::auto_exit_log;
+use orion_error::{ContextRecord, ToStructError, UvsResFrom};
 
 use crate::types::ResourceUploader;
 
@@ -24,40 +23,30 @@ impl ResourceDownloader for LocalAccessor {
             Address::Local(addr) => addr,
             _ => return Err(AddrReason::Brief(format!("addr type error {addr}")).to_err()),
         };
-        let mut ctx = OperationContext::want("update local addr");
-        ctx.with("src", addr.path().as_str());
-        ctx.with_path("dst", path);
+        let mut ctx = OperationContext::want("update local addr").with_exit_log();
+        ctx.record("src", addr.path().as_str());
+        ctx.record("dst", path.display().to_string());
         let src = PathBuf::from(addr.path().as_str());
         let options = CopyOptions::new().overwrite(true); // 默认选项
 
         std::fs::create_dir_all(path).owe_res()?;
         let name = path_file_name(&src)?;
         let dst = path.join(name);
-        let dst_copy = dst.clone();
-        let mut flag = auto_exit_log!(
-            info!(
-                target : "spec/addr/local",
-                "update {} to {} success!", src.display(),dst_copy.display()
-            ),
-            error!(
-                target : "spec/addr/local",
-                "update {} to {} failed", src.display(),dst_copy.display()
-            )
-        );
+        let _dst_copy = dst.clone();
 
         if src.is_file() {
             std::fs::copy(&src, &dst).owe_res()?;
         } else if dst.exists() && up_options.reuse_cache() {
             info!(
                 target : "spec/addr/local",
-                "ignore update {} to {} !", src.display(),dst_copy.display()
+                "ignore update {} to {} !", src.display(),_dst_copy.display()
             );
         } else {
             fs_extra::dir::copy(&src, path, &options)
                 .owe_data()
                 .with(&ctx)?;
         }
-        flag.mark_suc();
+        ctx.mark_suc();
         Ok(UpdateUnit::from(dst))
     }
 
@@ -115,20 +104,16 @@ pub fn path_file_name(path: &Path) -> AddrResult<String> {
 }
 #[debug_requires(local.exists(), "local need exists")]
 pub fn rename_path(local: &Path, name: &str) -> AddrResult<PathBuf> {
-    let mut ctx = OperationContext::want("rename path");
+    let mut ctx = OperationContext::want("rename path").with_exit_log();
     let dst_path = local
         .parent()
         .map(|x| x.join(name))
         .ok_or(AddrReason::from_conf("bad path".to_string()).to_err())?;
 
-    let dst_copy = dst_path.clone();
-    let mut flag = auto_exit_log!(
-        info!(target:"spec","rename {} to {} sucess!",local.display(),dst_copy.display()),
-        error!(target:"spec","rename {} to {} failed!",local.display(),dst_copy.display())
-    );
+    let _dst_copy = dst_path.clone();
     if dst_path.exists() {
         if dst_path == local {
-            flag.mark_suc();
+            ctx.mark_suc();
             return Ok(dst_path.clone());
         }
         if dst_path.is_dir() {
@@ -143,9 +128,9 @@ pub fn rename_path(local: &Path, name: &str) -> AddrResult<PathBuf> {
                 .want("remove dst")?;
         }
     }
-    ctx.with("new path", format!("{}", dst_path.display()));
+    ctx.record("new path", dst_path.display().to_string());
     std::fs::rename(local, &dst_path).owe_conf().with(&ctx)?;
-    flag.mark_suc();
+    ctx.mark_suc();
     Ok(dst_path)
 }
 

@@ -12,7 +12,7 @@ use bytes::Bytes;
 use futures_core::stream::Stream;
 use getset::{Getters, WithSetters};
 use http_body::{Frame, SizeHint};
-use orion_error::{ToStructError, UvsResFrom};
+use orion_error::{ContextRecord, ToStructError, UvsResFrom};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -113,7 +113,7 @@ impl HttpAccessor {
         method: &HttpMethod,
     ) -> AddrResult<()> {
         use indicatif::{ProgressBar, ProgressStyle};
-        let mut ctx = OperationContext::want("upload url");
+        let mut ctx = OperationContext::want("upload url").with_exit_log();
         let addr = if let Some(direct_serv) = &self.ctrl {
             direct_serv.direct_http_addr(addr.clone())
         } else {
@@ -123,7 +123,7 @@ impl HttpAccessor {
         let client =
             create_http_client_by_ctrl(self.ctrl().clone().and_then(|x| x.direct_http_ctrl(&addr)));
         let file_name = filename_of_url(addr.url()).unwrap_or_else(|| "file.bin".to_string());
-        ctx.with_path("local file", file_path.as_ref());
+        ctx.record("local file", file_path.as_ref().display().to_string());
 
         info!(
             target = "orion_variate::addr::http",
@@ -157,7 +157,7 @@ impl HttpAccessor {
             .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})").owe_logic()?
             .progress_chars("#>-"));
 
-        ctx.with("url", addr.url());
+        ctx.record("url", addr.url().as_str());
 
         // 创建进度追踪流
         let progress_stream =
@@ -211,6 +211,7 @@ impl HttpAccessor {
 
         pb.finish_with_message("上传完成");
         info!("upload completed");
+        ctx.mark_suc();
         Ok(())
     }
 
@@ -249,8 +250,8 @@ impl HttpAccessor {
         if dest_path.exists() {
             std::fs::remove_file(dest_path).owe_res()?;
         }
-        let mut ctx = OperationContext::want("download url");
-        ctx.with("url", addr.url());
+        let mut ctx = OperationContext::want("download url").with_exit_log();
+        ctx.record("url", addr.url().as_str());
         let client =
             create_http_client_by_ctrl(self.ctrl().clone().and_then(|x| x.direct_http_ctrl(&addr)));
         let mut request = client.get(addr.url());
@@ -272,7 +273,7 @@ impl HttpAccessor {
 
         let total_size = response.content_length().unwrap_or(0);
 
-        ctx.with_path("local", dest_path);
+        ctx.record("local", dest_path.display().to_string());
         let mut file = tokio::fs::File::create(&dest_path)
             .await
             .owe_conf()
@@ -305,6 +306,7 @@ impl HttpAccessor {
             path = %dest_path.display(),
             "download completed"
         );
+        ctx.mark_suc();
         Ok(dest_path.to_path_buf())
     }
 }
