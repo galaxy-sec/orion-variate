@@ -5,7 +5,7 @@ use indexmap::IndexMap;
 use orion_error::ErrorOwe;
 use serde_derive::{Deserialize, Serialize};
 
-use orion_common::serde::Yamlable;
+use orion_conf::Yamlable;
 
 use super::{EnvDict, EnvEvalable, ValueDict, VarDefinition, error::VarsResult};
 

@@ -4,7 +4,7 @@ use crate::types::{ResourceDownloader, ResourceUploader, UpdateUnit};
 use crate::update::{DownloadOptions, UploadOptions};
 use async_trait::async_trait;
 use log::error;
-use orion_common::serde::Yamlable;
+use orion_conf::Yamlable;
 use std::path::{Path, PathBuf};
 
 use super::git::GitAccessor;
