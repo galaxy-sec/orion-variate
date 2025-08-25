@@ -123,16 +123,11 @@ impl HttpAccessor {
         let client =
             create_http_client_by_ctrl(self.ctrl().clone().and_then(|x| x.direct_http_ctrl(&addr)));
         let file_name = filename_of_url(addr.url()).unwrap_or_else(|| "file.bin".to_string());
-        ctx.record("local file", file_path.as_ref().display().to_string());
+        ctx.record("local file", file_path.as_ref());
+        ctx.record("url ", addr.url().as_str());
+        ctx.record("file", file_name.as_str());
 
-        info!(
-            target = "orion_variate::addr::http",
-            file_path = %file_path.as_ref().display(),
-            url = %addr.url(),
-            method = ?method,
-            file_name = file_name,
-            "upload started"
-        );
+        ctx.info("upload start...");
 
         // 异步打开文件并获取大小
         let file = tokio::fs::File::open(&file_path)
@@ -145,19 +140,11 @@ impl HttpAccessor {
         // 创建原子计数器用于进度追踪
         let uploaded_bytes = Arc::new(AtomicU64::new(0));
 
-        debug!(
-            target = "orion_variate::addr::http",
-            file_size = content_len,
-            "local file opened"
-        );
-
         // 创建进度条
         let pb = ProgressBar::new(content_len);
         pb.set_style(ProgressStyle::default_bar()
             .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})").owe_logic()?
             .progress_chars("#>-"));
-
-        ctx.record("url", addr.url().as_str());
 
         // 创建进度追踪流
         let progress_stream =
@@ -199,18 +186,14 @@ impl HttpAccessor {
         // 设置初始进度
         pb.set_position(0);
 
-        debug!(
-            target = "orion_variate::addr::http",
-            url = %addr.url(),
-            "sending http upload request"
-        );
+        ctx.debug("sending http upload request");
 
         // 发送请求 - 进度会在流读取时自动更新
         let response = request.send().await.owe_res().with(&ctx)?;
         response.error_for_status().owe_res().with(&ctx)?;
 
         pb.finish_with_message("上传完成");
-        info!("upload completed");
+        ctx.info("upload completed");
         ctx.mark_suc();
         Ok(())
     }
