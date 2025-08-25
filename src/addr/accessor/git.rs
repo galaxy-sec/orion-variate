@@ -413,7 +413,7 @@ impl ResourceUploader for GitAccessor {
                 ctx.record("repo_open", "success");
             }
             Err(e) => {
-                ctx.record("repo_open", format!("failed: {}", e));
+                ctx.record("repo_open", format!("failed: {e}"));
                 debug!(target :"spec", "Open Local repo : {} is failed! error: {}", addr.repo(), e)
             }
         }
