@@ -24,7 +24,7 @@ impl ResourceDownloader for LocalAccessor {
             Address::Local(addr) => addr,
             _ => return Err(AddrReason::Brief(format!("addr type error {addr}")).to_err()),
         };
-        let mut ctx = WithContext::want("update local addr");
+        let mut ctx = OperationContext::want("update local addr");
         ctx.with("src", addr.path().as_str());
         ctx.with_path("dst", path);
         let src = PathBuf::from(addr.path().as_str());
@@ -115,7 +115,7 @@ pub fn path_file_name(path: &Path) -> AddrResult<String> {
 }
 #[debug_requires(local.exists(), "local need exists")]
 pub fn rename_path(local: &Path, name: &str) -> AddrResult<PathBuf> {
-    let mut ctx = WithContext::want("rename path");
+    let mut ctx = OperationContext::want("rename path");
     let dst_path = local
         .parent()
         .map(|x| x.join(name))

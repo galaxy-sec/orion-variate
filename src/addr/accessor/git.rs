@@ -16,7 +16,7 @@ use git2::{
 };
 use home::home_dir;
 use log::warn;
-use orion_error::{ToStructError, UvsResFrom};
+use orion_error::{ContextRecord, ToStructError, UvsResFrom};
 use orion_infra::auto_exit_log;
 use orion_infra::path::ensure_path;
 
@@ -284,21 +284,10 @@ impl ResourceDownloader for GitAccessor {
             .join(".cache/galaxy");
         ensure_path(&cache_local).owe_logic()?;
         let mut git_local = cache_local.join(name.clone());
-        let mut ctx = WithContext::want("update repository");
+        let mut ctx = OperationContext::want("update repository").with_exit_log();
 
-        ctx.with("repo", addr.repo());
-        ctx.with_path("path", &git_local);
-        let git_local_copy = git_local.clone();
-        let mut flag = auto_exit_log!(
-            info!(
-                target : "addr/git",
-                "update {} to {} success!", addr.repo(),git_local_copy.display()
-            ),
-            error!(
-                target : "addr/git",
-                "update {} to {} failed", addr.repo(),git_local_copy.display()
-            )
-        );
+        ctx.record("repo", addr.repo().as_str());
+        ctx.record("path", &git_local);
         debug!( target : "addr/git", "update options {:?} where :{} ", options, git_local.display() );
         if git_local.exists() && options.clean_git_cache() {
             std::fs::remove_dir_all(&git_local).owe_logic().with(&ctx)?;
@@ -339,12 +328,12 @@ impl ResourceDownloader for GitAccessor {
         let options = CopyOptions::new();
         debug!(target:"spec", "src-path:{}", git_local.display() );
         debug!(target:"spec", "dst-path:{}", path.display() );
-        ctx.with_path("src-path", &git_local);
-        ctx.with_path("dst-path", &real_path);
+        ctx.record("src-path", &git_local);
+        ctx.record("dst-path", &real_path);
         fs_extra::copy_items(&[&git_local], path, &options)
             .owe_res()
             .with(&ctx)?;
-        flag.mark_suc();
+        ctx.mark_suc();
         Ok(UpdateUnit::from(real_path))
     }
 }
@@ -357,7 +346,7 @@ impl ResourceUploader for GitAccessor {
         path: &Path,
         _options: &UploadOptions,
     ) -> AddrResult<UpdateUnit> {
-        let ctx = WithContext::want("upload to repository");
+        let ctx = OperationContext::want("upload to repository");
         if !path.exists() {
             return Err(AddrReason::from_res("path not exist".into()).to_err());
         }
