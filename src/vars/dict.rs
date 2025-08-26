@@ -4,7 +4,7 @@ use crate::tpl::TplResult;
 use derive_getters::Getters;
 use derive_more::{Deref, From};
 use indexmap::IndexMap;
-use orion_common::serde::Yamlable;
+use orion_conf::Yamlable;
 use orion_error::ErrorOwe;
 use serde_derive::{Deserialize, Serialize};
 
