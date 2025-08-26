@@ -307,7 +307,9 @@ impl ResourceDownloader for GitAccessor {
             .join(".cache/galaxy");
         ensure_path(&cache_local).owe_logic()?;
         let mut git_local = cache_local.join(name.clone());
-        let mut ctx = OperationContext::want("update repository").with_exit_log();
+        let mut ctx = OperationContext::want("update repository")
+            .with_auto_log()
+            .with_mod_path("addr/git");
 
         ctx.record("repo", addr.repo().as_str());
         ctx.record("path", &git_local);
@@ -369,7 +371,9 @@ impl ResourceUploader for GitAccessor {
         path: &Path,
         _options: &UploadOptions,
     ) -> AddrResult<UpdateUnit> {
-        let mut ctx = OperationContext::want("upload to repository").with_exit_log();
+        let mut ctx = OperationContext::want("upload to repository")
+            .with_auto_log()
+            .with_mod_path("addr/git");
         ctx.record("target", path.display().to_string());
 
         if !path.exists() {
@@ -442,7 +446,9 @@ impl GitAccessor {
             addr.clone()
         };
 
-        let mut ctx = OperationContext::want("clone repository").with_exit_log();
+        let mut ctx = OperationContext::want("clone repository")
+            .with_auto_log()
+            .with_mod_path("addr/git");
         ctx.record("repo", repo_addr.repo().as_str());
         ctx.record("target", target_dir.display().to_string());
 

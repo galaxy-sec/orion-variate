@@ -113,7 +113,9 @@ impl HttpAccessor {
         method: &HttpMethod,
     ) -> AddrResult<()> {
         use indicatif::{ProgressBar, ProgressStyle};
-        let mut ctx = OperationContext::want("upload url").with_exit_log();
+        let mut ctx = OperationContext::want("upload url")
+            .with_auto_log()
+            .with_mod_path("addr/http");
         let addr = if let Some(direct_serv) = &self.ctrl {
             direct_serv.direct_http_addr(addr.clone())
         } else {
@@ -233,7 +235,9 @@ impl HttpAccessor {
         if dest_path.exists() {
             std::fs::remove_file(dest_path).owe_res()?;
         }
-        let mut ctx = OperationContext::want("download url").with_exit_log();
+        let mut ctx = OperationContext::want("download url")
+            .with_auto_log()
+            .with_mod_path("addr/http");
         ctx.record("url", addr.url().as_str());
         let client =
             create_http_client_by_ctrl(self.ctrl().clone().and_then(|x| x.direct_http_ctrl(&addr)));
