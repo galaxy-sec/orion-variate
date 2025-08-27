@@ -3,7 +3,10 @@ use getset::{Getters, WithSetters};
 use indexmap::IndexMap;
 use serde_derive::{Deserialize, Serialize};
 
-use super::{EnvDict, EnvEvalable, ValueDict, VarCollection, dict::ValueMap, types::ValueType};
+use super::{
+    EnvDict, EnvEvalable, ValueDict, VarCollection, definition::ChangeScope, dict::ValueMap,
+    types::ValueType,
+};
 
 pub type OriginMap = IndexMap<String, OriginValue>;
 
@@ -27,9 +30,10 @@ impl EnvEvalable<OriginMap> for OriginMap {
 pub struct OriginValue {
     origin: Option<String>,
     value: ValueType,
-    #[getset(set_with = "pub")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    immutable: Option<bool>,
+    /// 替换原有的 immutable: Option<bool>
+    #[getset(get = "pub", set_with = "pub")]
+    #[serde(default, skip_serializing_if = "ChangeScope::is_default")]
+    scope: ChangeScope,
 }
 
 impl EnvEvalable<OriginValue> for OriginValue {
@@ -37,7 +41,7 @@ impl EnvEvalable<OriginValue> for OriginValue {
         Self {
             origin: self.origin,
             value: self.value.env_eval(dict),
-            immutable: self.immutable,
+            scope: self.scope,
         }
     }
 }
@@ -59,7 +63,7 @@ impl From<ValueType> for OriginValue {
         Self {
             value,
             origin: None,
-            immutable: None,
+            scope: ChangeScope::default(),
         }
     }
 }
@@ -68,7 +72,7 @@ impl From<&str> for OriginValue {
         Self {
             origin: None,
             value: ValueType::from(value),
-            immutable: None,
+            scope: ChangeScope::default(),
         }
     }
 }
@@ -78,8 +82,10 @@ impl OriginValue {
         self
     }
     pub fn is_mutable(&self) -> bool {
-        let immutable = self.immutable.unwrap_or(false);
-        !immutable
+        match self.scope {
+            ChangeScope::Immutable => false,
+            ChangeScope::Public | ChangeScope::Model => true,
+        }
     }
 }
 
@@ -98,7 +104,7 @@ impl From<VarCollection> for OriginDict {
         for item in value.vars() {
             dict.insert(
                 item.name().to_string(),
-                OriginValue::from(item.value().clone()).with_immutable(*item.immutable()),
+                OriginValue::from(item.value().clone()).with_scope(item.scope().clone()),
             );
         }
         Self { dict }
@@ -490,5 +496,114 @@ mod tests {
         assert_eq!(value1, value2);
         assert_ne!(value1, value3);
         assert_ne!(value1, value4);
+    }
+}
+
+#[cfg(test)]
+mod change_scope_tests {
+    use super::*;
+    use crate::vars::definition::ChangeScope;
+
+    #[test]
+    fn test_origin_value_is_mutable() {
+        let immutable_value = OriginValue {
+            origin: None,
+            value: ValueType::from("test"),
+            scope: ChangeScope::Immutable,
+        };
+        assert!(!immutable_value.is_mutable());
+
+        let public_value = OriginValue {
+            origin: None,
+            value: ValueType::from("test"),
+            scope: ChangeScope::Public,
+        };
+        assert!(public_value.is_mutable());
+
+        let model_value = OriginValue {
+            origin: None,
+            value: ValueType::from("test"),
+            scope: ChangeScope::Model,
+        };
+        assert!(model_value.is_mutable());
+    }
+
+    #[test]
+    fn test_origin_value_from_value_type() {
+        let value = OriginValue::from(ValueType::from("test"));
+        assert_eq!(value.scope(), &ChangeScope::Model);
+        assert!(value.is_mutable());
+    }
+
+    #[test]
+    fn test_origin_value_from_str() {
+        let value = OriginValue::from("test");
+        assert_eq!(value.scope(), &ChangeScope::Model);
+        assert!(value.is_mutable());
+    }
+
+    #[test]
+    fn test_origin_value_scope_getter_setter() {
+        let mut value = OriginValue::from("test");
+        assert_eq!(value.scope(), &ChangeScope::Model);
+
+        value = value.with_scope(ChangeScope::Immutable);
+        assert_eq!(value.scope(), &ChangeScope::Immutable);
+        assert!(!value.is_mutable());
+
+        value = value.with_scope(ChangeScope::Model);
+        assert_eq!(value.scope(), &ChangeScope::Model);
+        assert!(value.is_mutable());
+    }
+
+    #[test]
+    fn test_origin_value_with_origin() {
+        let value = OriginValue::from("test").with_origin("test_source");
+        assert_eq!(value.origin(), &Some("test_source".to_string()));
+        assert_eq!(value.scope(), &ChangeScope::Model);
+    }
+
+    #[test]
+    fn test_origin_value_env_eval() {
+        let mut env_dict = EnvDict::new();
+        env_dict.insert("TEST_VAR".to_string(), ValueType::from("replaced"));
+
+        let value = OriginValue {
+            origin: Some("test_origin".to_string()),
+            value: ValueType::from("prefix_${TEST_VAR}_suffix"),
+            scope: ChangeScope::Immutable,
+        };
+
+        let evaluated = value.env_eval(&env_dict);
+        assert_eq!(evaluated.origin(), &Some("test_origin".to_string()));
+        assert_eq!(
+            evaluated.value(),
+            &ValueType::from("prefix_replaced_suffix")
+        );
+        assert_eq!(evaluated.scope(), &ChangeScope::Immutable);
+        assert!(!evaluated.is_mutable());
+    }
+
+    #[test]
+    fn test_origin_value_serialization() {
+        let value = OriginValue {
+            origin: Some("test_origin".to_string()),
+            value: ValueType::from("test_value"),
+            scope: ChangeScope::Public,
+        };
+
+        // 默认的 Public scope 应该被跳过序列化
+        let json = serde_json::to_string(&value).unwrap();
+        assert!(!json.contains("scope"));
+
+        // Non-Default scope 应该被序列化
+        let immutable_value = OriginValue {
+            origin: Some("test_origin".to_string()),
+            value: ValueType::from("test_value"),
+            scope: ChangeScope::Immutable,
+        };
+
+        let json_immutable = serde_json::to_string(&immutable_value).unwrap();
+        assert!(json_immutable.contains("scope"));
     }
 }
