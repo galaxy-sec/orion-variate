@@ -1,19 +1,22 @@
-use std::default;
-
-use getset::{Getters, WithSetters};
+use getset::{Getters, Setters, WithSetters};
 use serde_derive::{Deserialize, Serialize};
 
 use super::ValueType;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum ChangeScope {
     /// 不可变变量，不允许任何修改
     Immutable,
     /// 公开可变变量，允许在任何上下文中修改
     Public,
     /// 模块级可变变量，只在同一模块内允许修改
-    #[default]
     Model,
+}
+
+impl Default for ChangeScope {
+    fn default() -> Self {
+        ChangeScope::Model
+    }
 }
 
 impl ChangeScope {
@@ -53,7 +56,7 @@ impl ChangeScope {
         }
     }
 }
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Getters, WithSetters)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Getters, WithSetters, Setters)]
 #[getset(get = "pub")]
 pub struct VarDefinition {
     name: String,
@@ -62,8 +65,8 @@ pub struct VarDefinition {
     #[serde(skip_serializing_if = "Option::is_none")]
     desp: Option<String>,
     /// 替换原有的 immutable: Option<bool>
-    #[getset(get = "pub", set_with = "pub")]
-    #[serde(default, skip_serializing_if = "ChangeScope::is_default")]
+    #[getset(get = "pub", set_with = "pub", set = "pub")]
+    #[serde(default, skip)]
     scope: ChangeScope,
 }
 impl VarDefinition {
@@ -216,7 +219,7 @@ mod tests {
             scope: ChangeScope::Public,
         };
 
-        // 默认的 Public scope 应该被跳过序列化
+        // scope 应该被跳过序列化
         let json = serde_json::to_string(&var).unwrap();
         assert!(!json.contains("scope"));
 
@@ -229,6 +232,6 @@ mod tests {
         };
 
         let json_immutable = serde_json::to_string(&var_immutable).unwrap();
-        assert!(json_immutable.contains("scope"));
+        assert!(!json_immutable.contains("scope"));
     }
 }

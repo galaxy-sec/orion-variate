@@ -101,12 +101,25 @@ impl From<ValueDict> for OriginDict {
 impl From<VarCollection> for OriginDict {
     fn from(value: VarCollection) -> Self {
         let mut dict = OriginMap::new();
-        for item in value.vars() {
+        for item in value.immutable_vars() {
             dict.insert(
                 item.name().to_string(),
                 OriginValue::from(item.value().clone()).with_scope(item.scope().clone()),
             );
         }
+        for item in value.public_vars() {
+            dict.insert(
+                item.name().to_string(),
+                OriginValue::from(item.value().clone()).with_scope(item.scope().clone()),
+            );
+        }
+        for item in value.modul_vars() {
+            dict.insert(
+                item.name().to_string(),
+                OriginValue::from(item.value().clone()).with_scope(item.scope().clone()),
+            );
+        }
+
         Self { dict }
     }
 }
