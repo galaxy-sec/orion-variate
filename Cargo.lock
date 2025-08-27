@@ -1706,9 +1706,8 @@ dependencies = [
 
 [[package]]
 name = "orion-error"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c9bfb02d84fac6709506af6d5c984031be8592e28297b29cfec0b6a32de67a8"
+version = "0.4.0"
+source = "git+https://github.com/galaxy-sec/orion-error.git?tag=v0.4.0#f0c8c95ef47aa44f3d80ffe991988cfd6b6a97e3"
 dependencies = [
  "derive-getters",
  "derive_more",
@@ -1718,11 +1717,13 @@ dependencies = [
 
 [[package]]
 name = "orion-error"
-version = "0.4.0"
-source = "git+https://github.com/galaxy-sec/orion-error.git?tag=v0.4.0#f0c8c95ef47aa44f3d80ffe991988cfd6b6a97e3"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cd756cd69dcbd7fe76af86e9d3e775cc767876d6203ea4c8a2afa06d0ca34ba3"
 dependencies = [
  "derive-getters",
  "derive_more",
+ "log",
  "serde",
  "thiserror 2.0.15",
 ]
@@ -1750,17 +1751,18 @@ dependencies = [
 
 [[package]]
 name = "orion_infra"
-version = "0.2.0"
-source = "git+https://github.com/galaxy-sec/orion-infra?tag=v0.3.0#56db20a9a3f6f5e9c68bc9e4a6dc4cdb9ecb28b6"
+version = "0.3.2"
+source = "git+https://github.com/galaxy-sec/orion-infra?tag=v0.3.2#ea91a50b252f5b696d6bac5e341175be54521da8"
 dependencies = [
  "anyhow",
  "derive_more",
  "flexi_logger",
  "log",
- "orion-error 0.3.1",
+ "orion-error 0.5.3",
  "scopeguard",
  "serde",
  "serde_derive",
+ "serde_yaml",
  "thiserror 2.0.15",
  "toml",
 ]
