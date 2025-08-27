@@ -1728,6 +1728,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "orion-error"
+version = "0.5.3"
+source = "git+https://github.com/galaxy-sec/orion-error.git?tag=v0.5.3#aa66bcad301862ca1b7ebdc56eb03602c32ffba0"
+dependencies = [
+ "derive-getters",
+ "derive_more",
+ "log",
+ "serde",
+ "thiserror 2.0.15",
+]
+
+[[package]]
 name = "orion_common"
 version = "0.3.0"
 source = "git+https://github.com/galaxy-sec/orion-common.git?tag=v0.3.0#918ef5bd7676bc50d76004d452b55858b43f13fe"
@@ -1789,7 +1801,7 @@ dependencies = [
  "indexmap",
  "indicatif",
  "log",
- "orion-error 0.4.0",
+ "orion-error 0.5.3",
  "orion_common",
  "orion_infra",
  "os_info",
