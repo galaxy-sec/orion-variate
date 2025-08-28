@@ -4,55 +4,55 @@ use serde_derive::{Deserialize, Serialize};
 use super::ValueType;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub enum ChangeScope {
+pub enum Mutability {
     /// 不可变变量，不允许任何修改
     Immutable,
     /// 公开可变变量，允许在任何上下文中修改
-    Public,
+    System,
     /// 模块级可变变量，只在同一模块内允许修改
-    Model,
+    Module,
 }
 
-impl Default for ChangeScope {
+impl Default for Mutability {
     fn default() -> Self {
-        ChangeScope::Model
+        Mutability::Module
     }
 }
 
-impl ChangeScope {
+impl Mutability {
     /// 检查是否为默认值，用于序列化优化
     pub fn is_default(&self) -> bool {
-        matches!(self, ChangeScope::Public)
+        matches!(self, Mutability::System)
     }
 
     /// 创建不可变作用域
     pub fn immutable() -> Self {
-        ChangeScope::Immutable
+        Mutability::Immutable
     }
 
     /// 创建公开可变作用域
     pub fn public() -> Self {
-        ChangeScope::Public
+        Mutability::System
     }
 
     /// 创建模块级可变作用域
     pub fn model() -> Self {
-        ChangeScope::Model
+        Mutability::Module
     }
 
     /// 为向后兼容，从旧格式的 Option<bool> 转换
     pub fn from_immutable_flag(immutable: Option<bool>) -> Self {
         match immutable {
-            Some(true) => ChangeScope::Immutable,
-            Some(false) | None => ChangeScope::Public,
+            Some(true) => Mutability::Immutable,
+            Some(false) | None => Mutability::System,
         }
     }
 
     /// 转换为旧格式，用于向后兼容
     pub fn to_immutable_flag(&self) -> Option<bool> {
         match self {
-            ChangeScope::Immutable => Some(true),
-            ChangeScope::Public | ChangeScope::Model => Some(false),
+            Mutability::Immutable => Some(true),
+            Mutability::System | Mutability::Module => Some(false),
         }
     }
 }
@@ -64,17 +64,28 @@ pub struct VarDefinition {
     #[getset(set_with = "pub")]
     #[serde(skip_serializing_if = "Option::is_none")]
     desp: Option<String>,
-    /// 替换原有的 immutable: Option<bool>
     #[getset(get = "pub", set_with = "pub", set = "pub")]
     #[serde(default, skip)]
-    scope: ChangeScope,
+    mutability: Mutability,
 }
 impl VarDefinition {
     pub fn is_mutable(&self) -> bool {
-        match self.scope {
-            ChangeScope::Immutable => false,
-            ChangeScope::Public | ChangeScope::Model => true,
+        match self.mutability {
+            Mutability::Immutable => false,
+            Mutability::System | Mutability::Module => true,
         }
+    }
+    pub fn with_mut_immutable(mut self) -> Self {
+        self.mutability = Mutability::Immutable;
+        self
+    }
+    pub fn with_mut_system(mut self) -> Self {
+        self.mutability = Mutability::System;
+        self
+    }
+    pub fn with_mut_module(mut self) -> Self {
+        self.mutability = Mutability::Module;
+        self
     }
 }
 impl From<(&str, &str)> for VarDefinition {
@@ -83,7 +94,7 @@ impl From<(&str, &str)> for VarDefinition {
             name: value.0.to_string(),
             desp: None,
             value: ValueType::from(value.1),
-            scope: ChangeScope::default(),
+            mutability: Mutability::default(),
         }
     }
 }
@@ -93,7 +104,7 @@ impl From<(&str, bool)> for VarDefinition {
             name: value.0.to_string(),
             desp: None,
             value: ValueType::from(value.1),
-            scope: ChangeScope::default(),
+            mutability: Mutability::default(),
         }
     }
 }
@@ -103,7 +114,7 @@ impl From<(&str, u64)> for VarDefinition {
             name: value.0.to_string(),
             desp: None,
             value: ValueType::from(value.1),
-            scope: ChangeScope::default(),
+            mutability: Mutability::default(),
         }
     }
 }
@@ -113,7 +124,7 @@ impl From<(&str, f64)> for VarDefinition {
             name: value.0.to_string(),
             desp: None,
             value: ValueType::from(value.1),
-            scope: ChangeScope::default(),
+            mutability: Mutability::default(),
         }
     }
 }
@@ -124,7 +135,7 @@ impl From<(&str, ValueType)> for VarDefinition {
             name: value.0.to_string(),
             desp: None,
             value: value.1,
-            scope: ChangeScope::default(),
+            mutability: Mutability::default(),
         }
     }
 }
@@ -135,29 +146,29 @@ mod tests {
 
     #[test]
     fn test_change_scope_factory_methods() {
-        assert_eq!(ChangeScope::immutable(), ChangeScope::Immutable);
-        assert_eq!(ChangeScope::public(), ChangeScope::Public);
-        assert_eq!(ChangeScope::model(), ChangeScope::Model);
+        assert_eq!(Mutability::immutable(), Mutability::Immutable);
+        assert_eq!(Mutability::public(), Mutability::System);
+        assert_eq!(Mutability::model(), Mutability::Module);
     }
 
     #[test]
     fn test_change_scope_from_immutable_flag() {
         assert_eq!(
-            ChangeScope::from_immutable_flag(Some(true)),
-            ChangeScope::Immutable
+            Mutability::from_immutable_flag(Some(true)),
+            Mutability::Immutable
         );
         assert_eq!(
-            ChangeScope::from_immutable_flag(Some(false)),
-            ChangeScope::Public
+            Mutability::from_immutable_flag(Some(false)),
+            Mutability::System
         );
-        assert_eq!(ChangeScope::from_immutable_flag(None), ChangeScope::Public);
+        assert_eq!(Mutability::from_immutable_flag(None), Mutability::System);
     }
 
     #[test]
     fn test_change_scope_to_immutable_flag() {
-        assert_eq!(ChangeScope::Immutable.to_immutable_flag(), Some(true));
-        assert_eq!(ChangeScope::Public.to_immutable_flag(), Some(false));
-        assert_eq!(ChangeScope::Model.to_immutable_flag(), Some(false));
+        assert_eq!(Mutability::Immutable.to_immutable_flag(), Some(true));
+        assert_eq!(Mutability::System.to_immutable_flag(), Some(false));
+        assert_eq!(Mutability::Module.to_immutable_flag(), Some(false));
     }
 
     #[test]
@@ -166,7 +177,7 @@ mod tests {
             name: "test".to_string(),
             desp: None,
             value: ValueType::from("value"),
-            scope: ChangeScope::Immutable,
+            mutability: Mutability::Immutable,
         };
         assert!(!immutable_var.is_mutable());
 
@@ -174,7 +185,7 @@ mod tests {
             name: "test".to_string(),
             desp: None,
             value: ValueType::from("value"),
-            scope: ChangeScope::Public,
+            mutability: Mutability::System,
         };
         assert!(public_var.is_mutable());
 
@@ -182,7 +193,7 @@ mod tests {
             name: "test".to_string(),
             desp: None,
             value: ValueType::from("value"),
-            scope: ChangeScope::Model,
+            mutability: Mutability::Module,
         };
         assert!(model_var.is_mutable());
     }
@@ -192,21 +203,21 @@ mod tests {
         let var = VarDefinition::from(("test_name", "test_value"));
         assert_eq!(var.name(), "test_name");
         assert_eq!(var.value(), &ValueType::from("test_value"));
-        assert_eq!(var.scope(), &ChangeScope::Model);
+        assert_eq!(var.mutability(), &Mutability::Module);
         assert!(var.is_mutable());
     }
 
     #[test]
     fn test_var_definition_scope_getter_setter() {
         let mut var = VarDefinition::from(("test", "value"));
-        assert_eq!(var.scope(), &ChangeScope::Model);
+        assert_eq!(var.mutability(), &Mutability::Module);
 
-        var = var.with_scope(ChangeScope::Immutable);
-        assert_eq!(var.scope(), &ChangeScope::Immutable);
+        var = var.with_mutability(Mutability::Immutable);
+        assert_eq!(var.mutability(), &Mutability::Immutable);
         assert!(!var.is_mutable());
 
-        var = var.with_scope(ChangeScope::Model);
-        assert_eq!(var.scope(), &ChangeScope::Model);
+        var = var.with_mutability(Mutability::Module);
+        assert_eq!(var.mutability(), &Mutability::Module);
         assert!(var.is_mutable());
     }
 
@@ -216,7 +227,7 @@ mod tests {
             name: "test".to_string(),
             desp: None,
             value: ValueType::from("value"),
-            scope: ChangeScope::Public,
+            mutability: Mutability::System,
         };
 
         // scope 应该被跳过序列化
@@ -228,7 +239,7 @@ mod tests {
             name: "test".to_string(),
             desp: None,
             value: ValueType::from("value"),
-            scope: ChangeScope::Immutable,
+            mutability: Mutability::Immutable,
         };
 
         let json_immutable = serde_json::to_string(&var_immutable).unwrap();

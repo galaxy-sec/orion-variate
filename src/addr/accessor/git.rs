@@ -297,19 +297,23 @@ impl ResourceDownloader for GitAccessor {
         path: &Path,
         options: &DownloadOptions,
     ) -> AddrResult<UpdateUnit> {
+        let mut ctx = OperationContext::want("download local")
+            .with_mod_path("addr/git")
+            .with_auto_log();
         let addr = match addr {
             Address::Git(x) => x,
-            _ => return AddrReason::Brief(format!("bad format for git {addr}")).err_result(),
+            _ => {
+                return AddrReason::Brief(format!("bad format for git {addr}"))
+                    .err_result()
+                    .with(&ctx);
+            }
         };
         let name = self.get_local_repo_name(addr);
         let cache_local = home_dir()
             .ok_or(AddrReason::from_res("unget home").to_err())?
             .join(".cache/galaxy");
-        ensure_path(&cache_local).owe_logic()?;
+        ensure_path(&cache_local).owe_logic().with(&ctx)?;
         let mut git_local = cache_local.join(name.clone());
-        let mut ctx = OperationContext::want("update repository")
-            .with_auto_log()
-            .with_mod_path("addr/git");
 
         ctx.record("repo", addr.repo().as_str());
         ctx.record("path", &git_local);
@@ -317,10 +321,8 @@ impl ResourceDownloader for GitAccessor {
         if git_local.exists() && options.clean_git_cache() {
             std::fs::remove_dir_all(&git_local).owe_logic().with(&ctx)?;
             std::fs::create_dir_all(&git_local).owe_logic().with(&ctx)?;
-            warn!(
-                target : "addr/git",
-                "remove cache {} from {} ", addr.repo(),git_local.display()
-            )
+
+            ctx.warn("remove cache ");
         } else {
             debug!( target : "addr/git", "git_local:{} , clean : {} ",  git_local.exists(), options.clean_git_cache() );
         }
