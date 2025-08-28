@@ -1,4 +1,4 @@
-use derive_getters::Getters;
+use getset::Getters;
 use indexmap::IndexMap;
 use orion_conf::StorageLoadEvent;
 use serde_derive::{Deserialize, Serialize};
@@ -6,6 +6,7 @@ use serde_derive::{Deserialize, Serialize};
 use super::{ValueDict, VarDefinition, definition::ChangeScope};
 
 #[derive(Getters, Clone, Debug, Serialize, Deserialize, PartialEq, Default)]
+#[getset(get = "pub")]
 //#[serde(transparent)]
 pub struct VarCollection {
     #[serde(default, skip_serializing_if = "Vec::is_empty", rename = "immutable")]
