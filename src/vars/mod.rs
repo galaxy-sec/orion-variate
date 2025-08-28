@@ -10,7 +10,7 @@ mod parse;
 mod types;
 pub use collection::VarCollection;
 pub use constraint::{ValueConstraint, ValueScope};
-pub use definition::{Mutability, VarDefinition};
+pub use definition::{Mutability, VarDefinition, VarToValue};
 pub use dict::ValueDict;
 pub use global::setup_start_env_vars;
 pub use origin::OriginDict;

@@ -15,7 +15,6 @@ use git2::{
     build::{CheckoutBuilder, RepoBuilder},
 };
 use home::home_dir;
-use log::warn;
 use orion_error::{ContextRecord, ToStructError, UvsBizFrom, UvsDataFrom, UvsResFrom};
 
 use orion_infra::path::ensure_path;

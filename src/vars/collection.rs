@@ -3,6 +3,8 @@ use indexmap::IndexMap;
 use orion_conf::StorageLoadEvent;
 use serde_derive::{Deserialize, Serialize};
 
+use crate::vars::VarToValue;
+
 use super::{ValueDict, VarDefinition, definition::Mutability};
 
 #[derive(Getters, Clone, Debug, Serialize, Deserialize, PartialEq, Default)]
@@ -26,6 +28,15 @@ pub struct VarCollection {
 impl StorageLoadEvent for VarCollection {
     fn loaded_event_do(&mut self) {
         self.mark_vars_scope();
+    }
+}
+impl VarToValue<ValueDict> for Vec<VarDefinition> {
+    fn to_val(&self) -> ValueDict {
+        let mut dict = ValueDict::new();
+        for var in self {
+            dict.insert(var.name().to_string(), var.value().clone());
+        }
+        dict
     }
 }
 impl VarCollection {

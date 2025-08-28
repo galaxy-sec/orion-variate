@@ -31,7 +31,7 @@ impl Mutability {
     }
 
     /// 创建公开可变作用域
-    pub fn public() -> Self {
+    pub fn system() -> Self {
         Mutability::System
     }
 
@@ -55,6 +55,9 @@ impl Mutability {
             Mutability::System | Mutability::Module => Some(false),
         }
     }
+}
+pub trait VarToValue<T> {
+    fn to_val(&self) -> T;
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Getters, WithSetters, Setters)]
 #[getset(get = "pub")]
@@ -147,7 +150,7 @@ mod tests {
     #[test]
     fn test_change_scope_factory_methods() {
         assert_eq!(Mutability::immutable(), Mutability::Immutable);
-        assert_eq!(Mutability::public(), Mutability::System);
+        assert_eq!(Mutability::system(), Mutability::System);
         assert_eq!(Mutability::model(), Mutability::Module);
     }
 
