@@ -75,6 +75,18 @@ impl VarDefinition {
             Mutability::System | Mutability::Module => true,
         }
     }
+    pub fn with_mut_immutable(mut self) -> Self {
+        self.mutability = Mutability::Immutable;
+        self
+    }
+    pub fn with_mut_system(mut self) -> Self {
+        self.mutability = Mutability::System;
+        self
+    }
+    pub fn with_mut_module(mut self) -> Self {
+        self.mutability = Mutability::Module;
+        self
+    }
 }
 impl From<(&str, &str)> for VarDefinition {
     fn from(value: (&str, &str)) -> Self {

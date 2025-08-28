@@ -17,10 +17,10 @@ pub struct VarCollection {
     #[serde(
         default,
         skip_serializing_if = "Vec::is_empty",
-        rename = "modul",
+        rename = "module",
         alias = "vars"
     )]
-    modul_vars: Vec<VarDefinition>,
+    module_vars: Vec<VarDefinition>,
 }
 impl StorageLoadEvent for VarCollection {
     fn loaded_event_do(&mut self) {
@@ -47,7 +47,7 @@ impl VarCollection {
         Self {
             immutable_vars,
             system_vars: public_vars,
-            modul_vars,
+            module_vars: modul_vars,
         }
     }
     pub fn mark_vars_scope(&mut self) {
@@ -57,7 +57,7 @@ impl VarCollection {
         for var in self.system_vars.iter_mut() {
             var.set_mutability(Mutability::System);
         }
-        for var in self.modul_vars.iter_mut() {
+        for var in self.module_vars.iter_mut() {
             var.set_mutability(Mutability::Module);
         }
     }
@@ -70,7 +70,7 @@ impl VarCollection {
         for var in self.system_vars() {
             dict.insert(var.name().to_string(), var.value().clone()); // 可能需要 into() 转换
         }
-        for var in self.modul_vars() {
+        for var in self.module_vars() {
             dict.insert(var.name().to_string(), var.value().clone()); // 可能需要 into() 转换
         }
         dict
@@ -79,11 +79,11 @@ impl VarCollection {
     pub fn merge(self, other: VarCollection) -> Self {
         let immutable_vars = merge_vec(self.immutable_vars, other.immutable_vars, false);
         let public_vars = merge_vec(self.system_vars, other.system_vars, true);
-        let modul_vars = merge_vec(self.modul_vars, other.modul_vars, true);
+        let modul_vars = merge_vec(self.module_vars, other.module_vars, true);
         Self {
             immutable_vars,
             system_vars: public_vars,
-            modul_vars,
+            module_vars: modul_vars,
         }
     }
 
@@ -92,7 +92,7 @@ impl VarCollection {
         Self {
             immutable_vars: Vec::new(),
             system_vars: public_vars,
-            modul_vars: Vec::new(),
+            module_vars: Vec::new(),
         }
     }
 }
@@ -146,8 +146,8 @@ mod tests {
         assert_eq!(collection.system_vars().len(), 1);
         assert_eq!(collection.system_vars()[0].name(), "public_var");
 
-        assert_eq!(collection.modul_vars().len(), 1);
-        assert_eq!(collection.modul_vars()[0].name(), "model_var");
+        assert_eq!(collection.module_vars().len(), 1);
+        assert_eq!(collection.module_vars()[0].name(), "model_var");
     }
 
     #[test]
@@ -199,7 +199,7 @@ mod tests {
         // 验证合并结果
         assert_eq!(merged.system_vars().len(), 2); // unique_to_1, unique_to_2
         assert_eq!(merged.immutable_vars().len(), 1); // var2
-        assert_eq!(merged.modul_vars().len(), 2); // var3, unique_to_1
+        assert_eq!(merged.module_vars().len(), 2); // var3, unique_to_1
 
         // 验证重复变量被正确处理
         let dict = merged.value_dict();
@@ -236,7 +236,11 @@ mod tests {
 
         // 验证序列化优化：空的字段应该被跳过
         // 首先检查 model_vars 是否为空
-        assert_eq!(original.modul_vars().len(), 0, "model_vars should be empty");
+        assert_eq!(
+            original.module_vars().len(),
+            0,
+            "model_vars should be empty"
+        );
         // model_vars 为空，应该被跳过
         assert!(
             !json.contains("\"model\""),
@@ -280,7 +284,7 @@ mod tests {
 
         assert_eq!(collection.immutable_vars().len(), 0);
         assert_eq!(collection.system_vars().len(), 0);
-        assert_eq!(collection.modul_vars().len(), 0);
+        assert_eq!(collection.module_vars().len(), 0);
 
         let dict = collection.value_dict();
         assert_eq!(dict.len(), 0);
@@ -299,7 +303,7 @@ mod tests {
         // 验证每个作用域都有一个重复名称的变量
         assert_eq!(collection.immutable_vars().len(), 1);
         assert_eq!(collection.system_vars().len(), 1);
-        assert_eq!(collection.modul_vars().len(), 1);
+        assert_eq!(collection.module_vars().len(), 1);
 
         // 验证 value_dict 包含所有变量（尽管名称相同，value_dict 是 IndexMap，后插入的会覆盖先插入的）
         let dict = collection.value_dict();
@@ -339,7 +343,7 @@ mod tests {
 
         assert_eq!(default_collection.immutable_vars().len(), 0);
         assert_eq!(default_collection.system_vars().len(), 0);
-        assert_eq!(default_collection.modul_vars().len(), 0);
+        assert_eq!(default_collection.module_vars().len(), 0);
 
         let dict = default_collection.value_dict();
         assert_eq!(dict.len(), 0);

@@ -113,7 +113,7 @@ impl From<VarCollection> for OriginDict {
                 OriginValue::from(item.value().clone()).with_mutability(item.mutability().clone()),
             );
         }
-        for item in value.modul_vars() {
+        for item in value.module_vars() {
             dict.insert(
                 item.name().to_string(),
                 OriginValue::from(item.value().clone()).with_mutability(item.mutability().clone()),
