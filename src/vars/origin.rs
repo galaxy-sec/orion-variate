@@ -141,6 +141,14 @@ impl OriginDict {
             }
         }
     }
+    pub fn with_origin<S: Into<String> + Clone>(mut self, lable: S) -> Self {
+        for x in self.dict.values_mut() {
+            if x.origin().is_none() {
+                x.origin = Some(lable.clone().into());
+            }
+        }
+        self
+    }
     pub fn merge(&mut self, other: &Self) {
         for (k, v) in other.iter() {
             if let Some(x) = self.get(k) {
