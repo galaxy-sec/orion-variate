@@ -35,6 +35,38 @@ impl EnvEvalable<Option<String>> for Option<String> {
 pub type ValueObj = IndexMap<String, ValueType>;
 pub type ValueVec = Vec<ValueType>;
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct UpperKey(String);
+
+impl UpperKey {
+    fn new<S: Into<String>>(key: S) -> Self {
+        Self(key.into().to_uppercase())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl<S: Into<String>> From<S> for UpperKey {
+    fn from(key: S) -> Self {
+        Self::new(key)
+    }
+}
+
+impl std::borrow::Borrow<str> for UpperKey {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::borrow::Borrow<String> for UpperKey {
+    fn borrow(&self) -> &String {
+        &self.0
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, From)]
 #[serde(untagged)]
 pub enum ValueType {

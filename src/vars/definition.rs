@@ -3,20 +3,15 @@ use serde_derive::{Deserialize, Serialize};
 
 use super::ValueType;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Default)]
 pub enum Mutability {
     /// 不可变变量，不允许任何修改
     Immutable,
     /// 公开可变变量，允许在任何上下文中修改
     System,
     /// 模块级可变变量，只在同一模块内允许修改
+    #[default]
     Module,
-}
-
-impl Default for Mutability {
-    fn default() -> Self {
-        Mutability::Module
-    }
 }
 
 impl Mutability {

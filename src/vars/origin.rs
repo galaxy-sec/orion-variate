@@ -3,12 +3,14 @@ use getset::{Getters, WithSetters};
 use indexmap::IndexMap;
 use serde_derive::{Deserialize, Serialize};
 
+use crate::vars::types::UpperKey;
+
 use super::{
     EnvDict, EnvEvalable, ValueDict, VarCollection, definition::Mutability, dict::ValueMap,
     types::ValueType,
 };
 
-pub type OriginMap = IndexMap<String, OriginValue>;
+pub type OriginMap = IndexMap<UpperKey, OriginValue>;
 
 impl EnvEvalable<OriginMap> for OriginMap {
     fn env_eval(self, dict: &EnvDict) -> OriginMap {
@@ -76,6 +78,7 @@ impl From<&str> for OriginValue {
         }
     }
 }
+
 impl OriginValue {
     pub fn with_origin<S: Into<String>>(mut self, origin: S) -> Self {
         self.origin = Some(origin.into());
@@ -103,19 +106,19 @@ impl From<VarCollection> for OriginDict {
         let mut dict = OriginMap::new();
         for item in value.immutable_vars() {
             dict.insert(
-                item.name().to_string(),
+                item.name().to_string().into(),
                 OriginValue::from(item.value().clone()).with_mutability(item.mutability().clone()),
             );
         }
         for item in value.system_vars() {
             dict.insert(
-                item.name().to_string(),
+                item.name().to_string().into(),
                 OriginValue::from(item.value().clone()).with_mutability(item.mutability().clone()),
             );
         }
         for item in value.module_vars() {
             dict.insert(
-                item.name().to_string(),
+                item.name().to_string().into(),
                 OriginValue::from(item.value().clone()).with_mutability(item.mutability().clone()),
             );
         }
@@ -131,7 +134,7 @@ impl OriginDict {
         }
     }
 
-    pub fn insert<S: Into<String>>(&mut self, k: S, v: ValueType) -> Option<OriginValue> {
+    pub fn insert<S: Into<UpperKey>>(&mut self, k: S, v: ValueType) -> Option<OriginValue> {
         self.dict.insert(k.into(), OriginValue::from(v))
     }
     pub fn set_source<S: Into<String> + Clone>(&mut self, lable: S) {
@@ -177,6 +180,10 @@ impl OriginDict {
             map.insert(k.clone(), v.clone());
         }
         map
+    }
+    pub fn ucase_get<S: AsRef<str>>(&self, key: S) -> Option<&OriginValue> {
+        let upper_key = UpperKey::from(key.as_ref());
+        self.dict.get(&upper_key)
     }
 }
 
@@ -262,7 +269,7 @@ mod tests {
 
         assert_eq!(dict.len(), 1);
         assert_eq!(
-            dict.get("key1").unwrap().value(),
+            dict.get("KEY1").unwrap().value(),
             &ValueType::from("new_value")
         );
     }
@@ -276,11 +283,11 @@ mod tests {
         dict.set_source("new_source");
 
         assert_eq!(
-            dict.get("key1").unwrap().origin().as_ref(),
+            dict.get("KEY1").unwrap().origin().as_ref(),
             Some(&"new_source".to_string())
         );
         assert_eq!(
-            dict.get("key2").unwrap().origin().as_ref(),
+            dict.get("KEY2").unwrap().origin().as_ref(),
             Some(&"new_source".to_string())
         );
     }
@@ -299,15 +306,15 @@ mod tests {
 
         assert_eq!(dict1.len(), 3);
         assert_eq!(
-            dict1.get("key1").unwrap().value(),
+            dict1.get("KEY1").unwrap().value(),
             &ValueType::from("value1")
         );
         assert_eq!(
-            dict1.get("key2").unwrap().value(),
+            dict1.get("KEY2").unwrap().value(),
             &ValueType::from("new_value2")
         );
         assert_eq!(
-            dict1.get("key3").unwrap().value(),
+            dict1.get("KEY3").unwrap().value(),
             &ValueType::from("value3")
         );
     }
@@ -321,8 +328,8 @@ mod tests {
         let value_map = dict.export_value();
 
         assert_eq!(value_map.len(), 2);
-        assert_eq!(value_map.get("key1"), Some(&ValueType::from("value1")));
-        assert_eq!(value_map.get("key2"), Some(&ValueType::from("value2")));
+        assert_eq!(value_map.get("KEY1"), Some(&ValueType::from("value1")));
+        assert_eq!(value_map.get("KEY2"), Some(&ValueType::from("value2")));
     }
 
     #[test]
@@ -334,8 +341,8 @@ mod tests {
         let value_dict = dict.export_dict();
 
         assert_eq!(value_dict.len(), 2);
-        assert_eq!(value_dict.get("key1"), Some(&ValueType::from("value1")));
-        assert_eq!(value_dict.get("key2"), Some(&ValueType::from("value2")));
+        assert_eq!(value_dict.get("KEY1"), Some(&ValueType::from("value1")));
+        assert_eq!(value_dict.get("KEY2"), Some(&ValueType::from("value2")));
     }
 
     #[test]
@@ -351,11 +358,11 @@ mod tests {
 
         assert_eq!(origin_map.len(), 2);
         assert_eq!(
-            origin_map.get("key1").unwrap().origin().as_ref(),
+            origin_map.get("KEY1").unwrap().origin().as_ref(),
             Some(&"origin1".to_string())
         );
         assert_eq!(
-            origin_map.get("key2").unwrap().origin().as_ref(),
+            origin_map.get("KEY2").unwrap().origin().as_ref(),
             Some(&"origin1".to_string())
         );
     }
@@ -370,26 +377,26 @@ mod tests {
 
         assert_eq!(origin_dict.len(), 2);
         assert_eq!(
-            origin_dict.get("key1").unwrap().value(),
+            origin_dict.get("KEY1").unwrap().value(),
             &ValueType::from("value1")
         );
         assert_eq!(
-            origin_dict.get("key2").unwrap().value(),
+            origin_dict.get("KEY2").unwrap().value(),
             &ValueType::from("value2")
         );
-        assert_eq!(origin_dict.get("key1").unwrap().origin().as_ref(), None);
-        assert_eq!(origin_dict.get("key2").unwrap().origin().as_ref(), None);
+        assert_eq!(origin_dict.get("KEY1").unwrap().origin().as_ref(), None);
+        assert_eq!(origin_dict.get("KEY2").unwrap().origin().as_ref(), None);
     }
 
     #[test]
     fn test_origin_map_env_eval() {
         let mut origin_map = OriginMap::new();
         origin_map.insert(
-            "key1".to_string(),
+            "key1".to_string().into(),
             OriginValue::from("prefix_${TEST_VAR}_suffix"),
         );
         origin_map.insert(
-            "key2".to_string(),
+            "key2".to_string().into(),
             OriginValue::from("static_value").with_origin("test_origin"),
         );
 
@@ -400,16 +407,16 @@ mod tests {
 
         assert_eq!(evaluated_map.len(), 2);
         assert_eq!(
-            evaluated_map.get("key1").unwrap().value(),
+            evaluated_map.get("KEY1").unwrap().value(),
             &ValueType::from("prefix_replaced_value_suffix")
         );
-        assert_eq!(evaluated_map.get("key1").unwrap().origin().as_ref(), None);
+        assert_eq!(evaluated_map.get("KEY1").unwrap().origin().as_ref(), None);
         assert_eq!(
-            evaluated_map.get("key2").unwrap().value(),
+            evaluated_map.get("KEY2").unwrap().value(),
             &ValueType::from("static_value")
         );
         assert_eq!(
-            evaluated_map.get("key2").unwrap().origin().as_ref(),
+            evaluated_map.get("KEY2").unwrap().origin().as_ref(),
             Some(&"test_origin".to_string())
         );
     }
@@ -438,11 +445,11 @@ mod tests {
         assert_eq!(cloned, dict);
         assert_eq!(cloned.len(), 2);
         assert_eq!(
-            cloned.get("key1").unwrap().origin().as_ref(),
+            cloned.get("KEY1").unwrap().origin().as_ref(),
             Some(&"origin1".to_string())
         );
         assert_eq!(
-            cloned.get("key2").unwrap().origin().as_ref(),
+            cloned.get("KEY2").unwrap().origin().as_ref(),
             Some(&"origin1".to_string())
         );
     }
@@ -465,7 +472,7 @@ mod tests {
         let debug_str = format!("{dict:?}");
 
         assert!(debug_str.contains("OriginDict"));
-        assert!(debug_str.contains("key1"));
+        assert!(debug_str.contains("KEY1"));
         assert!(debug_str.contains("value1"));
     }
 
@@ -485,8 +492,8 @@ mod tests {
         // Test deref to OriginMap
         let map: &OriginMap = &dict;
         assert_eq!(map.len(), 2);
-        assert!(map.contains_key("key1"));
-        assert!(map.contains_key("key2"));
+        assert!(map.contains_key("KEY1"));
+        assert!(map.contains_key("KEY2"));
     }
 
     #[test]

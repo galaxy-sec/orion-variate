@@ -77,13 +77,13 @@ impl VarCollection {
     pub fn value_dict(&self) -> ValueDict {
         let mut dict = ValueDict::new();
         for var in self.immutable_vars() {
-            dict.insert(var.name().to_string(), var.value().clone()); // 可能需要 into() 转换
+            dict.insert(var.name().to_string(), var.value().clone()); // String 自动转换为 UpperKey
         }
         for var in self.system_vars() {
-            dict.insert(var.name().to_string(), var.value().clone()); // 可能需要 into() 转换
+            dict.insert(var.name().to_string(), var.value().clone()); // String 自动转换为 UpperKey
         }
         for var in self.module_vars() {
-            dict.insert(var.name().to_string(), var.value().clone()); // 可能需要 into() 转换
+            dict.insert(var.name().to_string(), var.value().clone()); // String 自动转换为 UpperKey
         }
         dict
     }
@@ -178,15 +178,15 @@ mod tests {
         // 验证字典包含所有变量
         assert_eq!(dict.len(), 4);
         assert_eq!(
-            dict.get("immutable_var"),
+            dict.get("IMMUTABLE_VAR"),
             Some(&ValueType::from("immutable_value"))
         );
         assert_eq!(
-            dict.get("public_var"),
+            dict.get("PUBLIC_VAR"),
             Some(&ValueType::from("public_value"))
         );
-        assert_eq!(dict.get("model_var"), Some(&ValueType::from("model_value")));
-        assert_eq!(dict.get("numeric_var"), Some(&ValueType::from(42u64)));
+        assert_eq!(dict.get("MODEL_VAR"), Some(&ValueType::from("model_value")));
+        assert_eq!(dict.get("NUMERIC_VAR"), Some(&ValueType::from(42u64)));
     }
 
     #[test]
@@ -215,11 +215,11 @@ mod tests {
 
         // 验证重复变量被正确处理
         let dict = merged.value_dict();
-        assert_eq!(dict.get("var1"), Some(&ValueType::from("value1_from_2"))); // 第一个集合的值优先
-        assert_eq!(dict.get("var2"), Some(&ValueType::from("value2_from_1")));
-        assert_eq!(dict.get("var3"), Some(&ValueType::from("value3_from_2")));
-        assert_eq!(dict.get("unique_to_1"), Some(&ValueType::from("unique")));
-        assert_eq!(dict.get("unique_to_2"), Some(&ValueType::from("unique2")));
+        assert_eq!(dict.get("VAR1"), Some(&ValueType::from("value1_from_2"))); // 第一个集合的值优先
+        assert_eq!(dict.get("VAR2"), Some(&ValueType::from("value2_from_1")));
+        assert_eq!(dict.get("VAR3"), Some(&ValueType::from("value3_from_2")));
+        assert_eq!(dict.get("UNIQUE_TO_1"), Some(&ValueType::from("unique")));
+        assert_eq!(dict.get("UNIQUE_TO_2"), Some(&ValueType::from("unique2")));
     }
 
     #[test]
@@ -320,7 +320,7 @@ mod tests {
         // 验证 value_dict 包含所有变量（尽管名称相同，value_dict 是 IndexMap，后插入的会覆盖先插入的）
         let dict = collection.value_dict();
         // 由于 value_dict 按 immutable -> public -> model 的顺序插入，model 会覆盖前面同名的
-        assert_eq!(dict.get("duplicate"), Some(&ValueType::from("third")));
+        assert_eq!(dict.get("DUPLICATE"), Some(&ValueType::from("third")));
     }
 
     #[test]
@@ -337,16 +337,16 @@ mod tests {
         let dict = collection.value_dict();
 
         // 验证特殊字符名称能正确处理
-        assert_eq!(dict.get("normal_name"), Some(&ValueType::from("normal")));
+        assert_eq!(dict.get("NORMAL_NAME"), Some(&ValueType::from("normal")));
         assert_eq!(
-            dict.get("name-with-dashes"),
+            dict.get("NAME-WITH-DASHES"),
             Some(&ValueType::from("dashed"))
         );
         assert_eq!(
-            dict.get("name_with_underscores"),
+            dict.get("NAME_WITH_UNDERSCORES"),
             Some(&ValueType::from("underscored"))
         );
-        assert_eq!(dict.get("name.with.dots"), Some(&ValueType::from("dotted")));
+        assert_eq!(dict.get("NAME.WITH.DOTS"), Some(&ValueType::from("dotted")));
     }
 
     #[test]

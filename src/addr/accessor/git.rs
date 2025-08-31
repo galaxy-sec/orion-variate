@@ -986,9 +986,9 @@ mod tests {
 
         assert!(result.is_err());
 
-        // 测试不存在的仓库
+        // 测试不存在的仓库 - 使用明显无效的协议
         let non_existent_addr =
-            GitRepository::from("https://github.com/nonexistent/repo123456.git");
+            GitRepository::from("nonexistent-protocol://invalid-server.com/repo.git");
         let non_existent_result = invalid_accessor
             .download_to_local(
                 &Address::Git(non_existent_addr),

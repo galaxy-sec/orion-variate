@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::Path};
 
-use crate::tpl::TplResult;
+use crate::{tpl::TplResult, vars::types::UpperKey};
 use derive_getters::Getters;
 use derive_more::{Deref, From};
 use indexmap::IndexMap;
@@ -13,7 +13,7 @@ use super::{
     types::{EnvEvalable, ValueType},
 };
 
-pub type ValueMap = IndexMap<String, ValueType>;
+pub type ValueMap = IndexMap<UpperKey, ValueType>;
 
 impl EnvEvalable<ValueMap> for ValueMap {
     fn env_eval(self, dict: &EnvDict) -> ValueMap {
@@ -46,7 +46,7 @@ impl From<HashMap<String, String>> for ValueDict {
     fn from(map: HashMap<String, String>) -> Self {
         let mut vmap = ValueMap::new();
         for (k, v) in map {
-            vmap.insert(k, ValueType::from(v));
+            vmap.insert(UpperKey::from(k), ValueType::from(v));
         }
         Self { dict: vmap }
     }
@@ -58,7 +58,7 @@ impl ValueDict {
         }
     }
 
-    pub fn insert<S: Into<String>>(&mut self, k: S, v: ValueType) -> Option<ValueType> {
+    pub fn insert<S: Into<UpperKey>>(&mut self, k: S, v: ValueType) -> Option<ValueType> {
         self.dict.insert(k.into(), v)
     }
     pub fn merge(&mut self, other: &ValueDict) {
@@ -67,6 +67,31 @@ impl ValueDict {
                 self.dict.insert(k.clone(), v.clone());
             }
         }
+    }
+
+    /// 以大小写不敏感的方式获取值
+    ///
+    /// # 参数
+    /// * `key` - 要查找的键（可以是任何大小写）
+    ///
+    /// # 返回值
+    /// 返回对应值的引用，如果不存在则返回 None
+    ///
+    /// # 示例
+    /// ```
+    /// use orion_variate::vars::ValueDict;
+    /// use orion_variate::vars::ValueType;
+    ///
+    /// let mut dict = ValueDict::new();
+    /// dict.insert("Hello", ValueType::from("world"));
+    ///
+    /// assert_eq!(dict.ucase_get("hello"), Some(&ValueType::from("world")));
+    /// assert_eq!(dict.ucase_get("HELLO"), Some(&ValueType::from("world")));
+    /// assert_eq!(dict.ucase_get("nonexistent"), None);
+    /// ```
+    pub fn ucase_get<S: AsRef<str>>(&self, key: S) -> Option<&ValueType> {
+        let upper_key = UpperKey::from(key.as_ref());
+        self.dict.get(&upper_key)
     }
 
     pub fn eval_from_file(dict: &EnvDict, file_path: &Path) -> TplResult<Self> {
@@ -151,11 +176,17 @@ mod tests {
 
         // 创建ValueMap
         let mut value_map = ValueMap::new();
-        value_map.insert("key1".to_string(), ValueType::from("value1"));
-        value_map.insert("KEY2".to_string(), ValueType::from("${env_key1}-${key1}"));
-        value_map.insert("KEY3".to_string(), ValueType::from("${ENV_KEY2}-${KEY2}"));
+        value_map.insert(UpperKey::from("key1"), ValueType::from("value1"));
         value_map.insert(
-            "key4".to_string(),
+            UpperKey::from("KEY2"),
+            ValueType::from("${ENV_KEY1}-${KEY1}"),
+        );
+        value_map.insert(
+            UpperKey::from("KEY3"),
+            ValueType::from("${ENV_KEY2}-${KEY2}"),
+        );
+        value_map.insert(
+            UpperKey::from("key4"),
             ValueType::from("${undefined_key:default_value}"),
         );
 
@@ -163,7 +194,7 @@ mod tests {
         let result = value_map.env_eval(&env_dict);
 
         // 验证结果
-        assert_eq!(result.get("key1"), Some(&ValueType::from("value1")));
+        assert_eq!(result.get("KEY1"), Some(&ValueType::from("value1")));
         assert_eq!(
             result.get("KEY2"),
             Some(&ValueType::from("env_value1-value1"))
@@ -172,7 +203,7 @@ mod tests {
             result.get("KEY3"),
             Some(&ValueType::from("env_value2-env_value1-value1"))
         );
-        assert_eq!(result.get("key4"), Some(&ValueType::from("default_value")));
+        assert_eq!(result.get("KEY4"), Some(&ValueType::from("default_value")));
     }
 
     #[test]
@@ -187,19 +218,19 @@ mod tests {
 
         // 创建环境字典
         let mut env_dict = EnvDict::new();
-        env_dict.insert("host".to_string(), ValueType::from("example.com"));
-        env_dict.insert("port".to_string(), ValueType::from("8080"));
+        env_dict.insert("HOST".to_string(), ValueType::from("example.com"));
+        env_dict.insert("PORT".to_string(), ValueType::from("8080"));
 
         // 创建ValueMap，使用环境变量和字典变量
         let mut value_map = ValueMap::new();
-        value_map.insert("config1".to_string(), ValueType::from("${host}"));
-        value_map.insert("config2".to_string(), ValueType::from("${ENV_HOST}"));
+        value_map.insert(UpperKey::from("config1"), ValueType::from("${HOST}"));
+        value_map.insert(UpperKey::from("config2"), ValueType::from("${ENV_HOST}"));
         value_map.insert(
-            "config3".to_string(),
-            ValueType::from("prefix_${host}_suffix"),
+            UpperKey::from("config3"),
+            ValueType::from("prefix_${HOST}_suffix"),
         );
         value_map.insert(
-            "config4".to_string(),
+            UpperKey::from("config4"),
             ValueType::from("prefix_${ENV_HOST}_suffix"),
         );
 
@@ -207,17 +238,17 @@ mod tests {
         let result = value_map.env_eval(&env_dict);
 
         // 验证结果
-        assert_eq!(result.get("config1"), Some(&ValueType::from("example.com")));
+        assert_eq!(result.get("CONFIG1"), Some(&ValueType::from("example.com")));
         assert_eq!(
-            result.get("config2"),
+            result.get("CONFIG2"),
             Some(&ValueType::from("env.example.com"))
         );
         assert_eq!(
-            result.get("config3"),
+            result.get("CONFIG3"),
             Some(&ValueType::from("prefix_example.com_suffix"))
         );
         assert_eq!(
-            result.get("config4"),
+            result.get("CONFIG4"),
             Some(&ValueType::from("prefix_env.example.com_suffix"))
         );
 
@@ -228,5 +259,91 @@ mod tests {
         unsafe {
             std::env::remove_var("ENV_PORT");
         }
+    }
+
+    #[test]
+    fn test_ucase_get() {
+        let mut dict = ValueDict::new();
+        dict.insert("Hello", ValueType::from("world"));
+        dict.insert("WORLD", ValueType::from("hello"));
+        dict.insert("CamelCase", ValueType::from("value"));
+
+        // 测试大小写不敏感查找
+        assert_eq!(dict.ucase_get("hello"), Some(&ValueType::from("world")));
+        assert_eq!(dict.ucase_get("HELLO"), Some(&ValueType::from("world")));
+        assert_eq!(dict.ucase_get("Hello"), Some(&ValueType::from("world")));
+
+        // 测试不同键的查找
+        assert_eq!(dict.ucase_get("world"), Some(&ValueType::from("hello")));
+        assert_eq!(dict.ucase_get("World"), Some(&ValueType::from("hello")));
+        assert_eq!(dict.ucase_get("WORLD"), Some(&ValueType::from("hello")));
+
+        // 测试驼峰命名查找
+        assert_eq!(dict.ucase_get("camelcase"), Some(&ValueType::from("value")));
+        assert_eq!(dict.ucase_get("CAMELCASE"), Some(&ValueType::from("value")));
+        assert_eq!(dict.ucase_get("CamelCase"), Some(&ValueType::from("value")));
+
+        // 测试不存在的键
+        assert_eq!(dict.ucase_get("nonexistent"), None);
+        assert_eq!(dict.ucase_get(""), None);
+    }
+
+    #[test]
+    fn test_ucase_get_with_special_chars() {
+        let mut dict = ValueDict::new();
+        dict.insert("key-with-dashes", ValueType::from("dashed"));
+        dict.insert("key_with_underscores", ValueType::from("underscored"));
+        dict.insert("key.with.dots", ValueType::from("dotted"));
+
+        // 测试包含特殊字符的键
+        assert_eq!(
+            dict.ucase_get("key-with-dashes"),
+            Some(&ValueType::from("dashed"))
+        );
+        assert_eq!(
+            dict.ucase_get("KEY-WITH-DASHES"),
+            Some(&ValueType::from("dashed"))
+        );
+
+        assert_eq!(
+            dict.ucase_get("key_with_underscores"),
+            Some(&ValueType::from("underscored"))
+        );
+        assert_eq!(
+            dict.ucase_get("KEY_WITH_UNDERSCORES"),
+            Some(&ValueType::from("underscored"))
+        );
+
+        assert_eq!(
+            dict.ucase_get("key.with.dots"),
+            Some(&ValueType::from("dotted"))
+        );
+        assert_eq!(
+            dict.ucase_get("KEY.WITH.DOTS"),
+            Some(&ValueType::from("dotted"))
+        );
+    }
+
+    #[test]
+    fn test_ucase_get_edge_cases() {
+        let mut dict = ValueDict::new();
+
+        // 测试空字典
+        assert_eq!(dict.ucase_get("any"), None);
+
+        // 插入空字符串键
+        dict.insert("", ValueType::from("empty"));
+        assert_eq!(dict.ucase_get(""), Some(&ValueType::from("empty")));
+        assert_eq!(dict.ucase_get("  "), None);
+
+        // 测试 Unicode 字符
+        dict.insert("café", ValueType::from("coffee"));
+        assert_eq!(dict.ucase_get("CAFÉ"), Some(&ValueType::from("coffee")));
+        assert_eq!(dict.ucase_get("café"), Some(&ValueType::from("coffee")));
+
+        // 测试数字键
+        dict.insert("123", ValueType::from("number"));
+        assert_eq!(dict.ucase_get("123"), Some(&ValueType::from("number")));
+        assert_eq!(dict.ucase_get("123"), Some(&ValueType::from("number")));
     }
 }
