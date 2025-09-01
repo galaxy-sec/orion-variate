@@ -11,13 +11,12 @@ use async_trait::async_trait;
 use fs_extra::dir::CopyOptions;
 use getset::{Getters, Setters, WithSetters};
 use git2::{
-    BranchType, FetchOptions, MergeOptions, PushOptions, RemoteUpdateFlags, Repository, ResetType,
+    BranchType, FetchOptions, MergeOptions, RemoteUpdateFlags, Repository, ResetType,
     build::{CheckoutBuilder, RepoBuilder},
 };
 use home::home_dir;
-use log::warn;
-use orion_error::{ToStructError, UvsResFrom};
-use orion_infra::auto_exit_log;
+use orion_error::{ContextRecord, ToStructError, UvsBizFrom, UvsDataFrom, UvsResFrom};
+
 use orion_infra::path::ensure_path;
 
 ///
@@ -127,9 +126,9 @@ impl GitAccessor {
     }
 
     /// 更新现有仓库
-    fn update_repo(&self, addr: &GitRepository, repo: &Repository) -> Result<(), git2::Error> {
+    fn update_repo(&self, addr: &GitRepository, repo: &Repository) -> AddrResult<()> {
         if !self.is_workdir_clean(repo)? {
-            return Err(git2::Error::from_str("工作区有未提交的更改"));
+            return Err(AddrReason::from_biz("工作区有未提交的更改").to_err());
         }
         // 1. 获取远程更新
         self.fetch_updates(addr, repo)?;
@@ -142,9 +141,9 @@ impl GitAccessor {
     }
 
     /// 执行 pull 操作：合并远程变更
-    fn pull_updates(&self, _addr: &GitRepository, repo: &Repository) -> Result<(), git2::Error> {
+    fn pull_updates(&self, _addr: &GitRepository, repo: &Repository) -> AddrResult<()> {
         // 获取当前分支信息
-        let head = repo.head()?;
+        let head = repo.head().owe_data().want("get repo head")?;
         let branch_name = match head.shorthand() {
             Some(name) => name,
             None => return Ok(()), // 分离头状态不需要 pull
@@ -158,8 +157,14 @@ impl GitAccessor {
         };
 
         // 获取当前提交和上游提交
-        let current_commit = head.peel_to_commit()?;
-        let upstream_commit = upstream_ref.peel_to_commit()?;
+        let current_commit = head
+            .peel_to_commit()
+            .owe_data()
+            .want("current peel to commit")?;
+        let upstream_commit = upstream_ref
+            .peel_to_commit()
+            .owe_data()
+            .want("upstream peel to commit ")?;
 
         // 如果已经在最新状态，无需操作
         if current_commit.id() == upstream_commit.id() {
@@ -167,8 +172,14 @@ impl GitAccessor {
         }
 
         // 分析合并可能性
-        let annotated_commit = repo.find_annotated_commit(upstream_commit.id())?;
-        let analysis = repo.merge_analysis(&[&annotated_commit])?;
+        let annotated_commit = repo
+            .find_annotated_commit(upstream_commit.id())
+            .owe_data()
+            .want("find annotated commit")?;
+        let analysis = repo
+            .merge_analysis(&[&annotated_commit])
+            .owe_data()
+            .want("merge analysis")?;
         //let analysis = repo.merge_analysis(&[&upstream_commit])?;
 
         if analysis.0.is_up_to_date() {
@@ -188,44 +199,54 @@ impl GitAccessor {
         &self,
         repo: &Repository,
         upstream_commit: &git2::Commit,
-    ) -> Result<(), git2::Error> {
+    ) -> AddrResult<()> {
         // 获取当前分支名称
-        let refname = match repo.head()?.name() {
+        let refname = match repo.head().owe_data()?.name() {
             Some(name) => name.to_string(),
-            None => return Err(git2::Error::from_str("无法获取分支名称")),
+            None => return AddrReason::from_biz("无法获取分支名称").err_result(),
         };
 
         // 更新引用到上游提交
-        repo.reference(&refname, upstream_commit.id(), true, "Fast-forward")?;
+        repo.reference(&refname, upstream_commit.id(), true, "Fast-forward")
+            .owe_data()
+            .want("reference update")?;
 
         // 重置工作区到新提交
-        repo.reset(upstream_commit.as_object(), ResetType::Hard, None)?;
+        repo.reset(upstream_commit.as_object(), ResetType::Hard, None)
+            .owe_data()
+            .want("reset")?;
 
         Ok(())
     }
 
     /// 执行非快进合并 (修复类型错误)
-    fn merge_upstream(
-        &self,
-        repo: &Repository,
-        upstream_commit: &git2::Commit,
-    ) -> Result<(), git2::Error> {
+    fn merge_upstream(&self, repo: &Repository, upstream_commit: &git2::Commit) -> AddrResult<()> {
         // 创建带注释的提交 (修复类型不匹配)
-        let annotated_commit = repo.find_annotated_commit(upstream_commit.id())?;
+        let annotated_commit = repo
+            .find_annotated_commit(upstream_commit.id())
+            .owe_data()
+            .want("find annotated commit")?;
 
         // 执行合并
-        repo.merge(&[&annotated_commit], Some(&mut MergeOptions::new()), None)?;
+        repo.merge(&[&annotated_commit], Some(&mut MergeOptions::new()), None)
+            .owe_data()
+            .want("merge")?;
 
         // 检查合并状态
-        if repo.index()?.has_conflicts() {
-            return Err(git2::Error::from_str("合并冲突：需要手动解决"));
+        if repo.index().owe_data().want("repo index")?.has_conflicts() {
+            return AddrReason::from_biz("合并冲突：需要手动解决").err_result();
         }
 
         // 创建合并提交
-        let head_commit = repo.head()?.peel_to_commit()?;
-        let mut index = repo.index()?;
-        let tree_oid = index.write_tree()?;
-        let tree = repo.find_tree(tree_oid)?;
+        let head_commit = repo
+            .head()
+            .owe_data()
+            .want("head")?
+            .peel_to_commit()
+            .owe_data()?;
+        let mut index = repo.index().owe_data()?;
+        let tree_oid = index.write_tree().owe_data()?;
+        let tree = repo.find_tree(tree_oid).owe_data()?;
 
         repo.commit(
             Some("HEAD"),
@@ -234,21 +255,22 @@ impl GitAccessor {
             "合并远程变更",
             &tree,
             &[&head_commit, upstream_commit],
-        )?;
+        )
+        .owe_data()?;
 
         // 清理合并状态
-        repo.cleanup_state()?;
+        repo.cleanup_state().owe_data()?;
 
         Ok(())
     }
 
     /// 检查工作区是否干净
-    fn is_workdir_clean(&self, repo: &Repository) -> Result<bool, git2::Error> {
+    fn is_workdir_clean(&self, repo: &Repository) -> AddrResult<bool> {
         let mut options = git2::StatusOptions::new();
         options.include_untracked(true);
         options.include_ignored(false);
 
-        let statuses = repo.statuses(Some(&mut options))?;
+        let statuses = repo.statuses(Some(&mut options)).owe_data()?;
         Ok(statuses.is_empty())
     }
 
@@ -274,39 +296,32 @@ impl ResourceDownloader for GitAccessor {
         path: &Path,
         options: &DownloadOptions,
     ) -> AddrResult<UpdateUnit> {
+        let mut ctx = OperationContext::want("download local")
+            .with_mod_path("addr/git")
+            .with_auto_log();
         let addr = match addr {
             Address::Git(x) => x,
-            _ => return AddrReason::Brief(format!("bad format for git {addr}")).err_result(),
+            _ => {
+                return AddrReason::Brief(format!("bad format for git {addr}"))
+                    .err_result()
+                    .with(&ctx);
+            }
         };
         let name = self.get_local_repo_name(addr);
         let cache_local = home_dir()
-            .ok_or(AddrReason::from_res("unget home".into()).to_err())?
+            .ok_or(AddrReason::from_res("unget home").to_err())?
             .join(".cache/galaxy");
-        ensure_path(&cache_local).owe_logic()?;
+        ensure_path(&cache_local).owe_logic().with(&ctx)?;
         let mut git_local = cache_local.join(name.clone());
-        let mut ctx = WithContext::want("update repository");
 
-        ctx.with("repo", addr.repo());
-        ctx.with_path("path", &git_local);
-        let git_local_copy = git_local.clone();
-        let mut flag = auto_exit_log!(
-            info!(
-                target : "addr/git",
-                "update {} to {} success!", addr.repo(),git_local_copy.display()
-            ),
-            error!(
-                target : "addr/git",
-                "update {} to {} failed", addr.repo(),git_local_copy.display()
-            )
-        );
+        ctx.record("repo", addr.repo().as_str());
+        ctx.record("path", &git_local);
         debug!( target : "addr/git", "update options {:?} where :{} ", options, git_local.display() );
         if git_local.exists() && options.clean_git_cache() {
             std::fs::remove_dir_all(&git_local).owe_logic().with(&ctx)?;
             std::fs::create_dir_all(&git_local).owe_logic().with(&ctx)?;
-            warn!(
-                target : "addr/git",
-                "remove cache {} from {} ", addr.repo(),git_local.display()
-            )
+
+            ctx.warn("remove cache ");
         } else {
             debug!( target : "addr/git", "git_local:{} , clean : {} ",  git_local.exists(), options.clean_git_cache() );
         }
@@ -339,12 +354,12 @@ impl ResourceDownloader for GitAccessor {
         let options = CopyOptions::new();
         debug!(target:"spec", "src-path:{}", git_local.display() );
         debug!(target:"spec", "dst-path:{}", path.display() );
-        ctx.with_path("src-path", &git_local);
-        ctx.with_path("dst-path", &real_path);
+        ctx.record("src-path", &git_local);
+        ctx.record("dst-path", &real_path);
         fs_extra::copy_items(&[&git_local], path, &options)
             .owe_res()
             .with(&ctx)?;
-        flag.mark_suc();
+        ctx.mark_suc();
         Ok(UpdateUnit::from(real_path))
     }
 }
@@ -357,9 +372,13 @@ impl ResourceUploader for GitAccessor {
         path: &Path,
         _options: &UploadOptions,
     ) -> AddrResult<UpdateUnit> {
-        let ctx = WithContext::want("upload to repository");
+        let mut ctx = OperationContext::want("upload to repository")
+            .with_auto_log()
+            .with_mod_path("addr/git");
+        ctx.record("target", path.display().to_string());
+
         if !path.exists() {
-            return Err(AddrReason::from_res("path not exist".into()).to_err());
+            return Err(AddrReason::from_res("path not exist").to_err());
         }
         let temp_path = home_dir().unwrap_or(PathBuf::from("~/")).join(".temp");
         ensure_path(&temp_path).owe_logic()?;
@@ -374,37 +393,45 @@ impl ResourceUploader for GitAccessor {
         };
         // 仓库地址
         let target_repo_in_local_path = &target_repo.position;
+        ctx.record(
+            "target_repo",
+            target_repo_in_local_path.display().to_string(),
+        );
+
         if path.is_file() {
             let filename = path
                 .file_name()
                 .and_then(|name| name.to_str())
                 .unwrap_or("UNKONW");
+            ctx.record("upload_type", "file");
+            ctx.record("filename", filename);
             std::fs::copy(path, target_repo_in_local_path.join(filename)).owe_res()?;
             std::fs::remove_file(path).owe_res()?;
         } else {
             let copy_options = CopyOptions::new().overwrite(true).copy_inside(true);
+            ctx.record("upload_type", "directory");
             fs_extra::copy_items(&[path], target_repo_in_local_path, &copy_options).owe_res()?;
             std::fs::remove_dir_all(path).owe_res()?;
         }
         match Repository::open(target_repo_in_local_path) {
-            Ok(repo) => {
-                let branch = addr.branch().clone();
-                self.submit(addr, &repo, branch.unwrap_or("master".into()).as_str())
-                    .owe_data()
-                    .with(&ctx)?;
+            Ok(_repo) => {
+                ctx.record("repo_open", "success");
             }
             Err(e) => {
+                ctx.record("repo_open", format!("failed: {e}"));
                 debug!(target :"spec", "Open Local repo : {} is failed! error: {}", addr.repo(), e)
             }
         }
         let name = self.get_local_repo_name(addr);
+        ctx.record("cleanup_temp", name.clone());
         std::fs::remove_dir_all(temp_path.join(name)).owe_res()?;
+        ctx.mark_suc();
         Ok(UpdateUnit::from(path.to_path_buf()))
     }
 }
 
 impl GitAccessor {
-    pub fn sync_repo(&self, addr: &GitRepository, target_dir: &Path) -> Result<(), git2::Error> {
+    pub fn sync_repo(&self, addr: &GitRepository, target_dir: &Path) -> AddrResult<()> {
         // 尝试打开现有仓库
         match Repository::open(target_dir) {
             Ok(repo) => self.update_repo(addr, &repo),
@@ -413,25 +440,21 @@ impl GitAccessor {
     }
 
     /// 克隆新仓库
-    fn clone_repo(&self, addr: &GitRepository, target_dir: &Path) -> Result<(), git2::Error> {
+    fn clone_repo(&self, addr: &GitRepository, target_dir: &Path) -> AddrResult<()> {
         let repo_addr = if let Some(director) = &self.ctrl {
             director.direct_git_addr(addr.clone())
         } else {
             addr.clone()
         };
-        // 准备回调以支持认证
-        //
-        let callbacks = self.build_remote_callbacks(&repo_addr); // 使用构建的回调
 
-        let mut flag = auto_exit_log!(
-            info!(
-                target : "addr/git",
-                "clone {} to {} success!",  repo_addr.repo().as_str()  , target_dir.display()         ),
-            error!(
-                target : "addr/git",
-                "clone {} to {} failed", repo_addr.repo().as_str()  , target_dir.display()
-            )
-        );
+        let mut ctx = OperationContext::want("clone repository")
+            .with_auto_log()
+            .with_mod_path("addr/git");
+        ctx.record("repo", repo_addr.repo().as_str());
+        ctx.record("target", target_dir.display().to_string());
+
+        // 准备回调以支持认证
+        let callbacks = self.build_remote_callbacks(&repo_addr);
         // 配置获取选项
         let mut fetch_options = FetchOptions::new();
         fetch_options.remote_callbacks(callbacks);
@@ -449,17 +472,17 @@ impl GitAccessor {
 
         println!("clone repo from {}", repo_addr.repo());
         // 执行克隆
-        let repo = builder.clone(repo_addr.repo(), target_dir)?;
+        let repo = builder.clone(repo_addr.repo(), target_dir).owe_data()?;
 
-        flag.mark_suc();
+        ctx.mark_suc();
         // 处理检出目标
         self.checkout_target(&repo_addr, &repo)
     }
 
     /// 获取远程更新
-    fn fetch_updates(&self, addr: &GitRepository, repo: &Repository) -> Result<(), git2::Error> {
+    fn fetch_updates(&self, addr: &GitRepository, repo: &Repository) -> AddrResult<()> {
         // 查找 origin 远程
-        let mut remote = repo.find_remote("origin")?;
+        let mut remote = repo.find_remote("origin").owe_data()?;
 
         // 准备认证回调
         let callbacks = self.build_remote_callbacks(addr); // 使用构建的回调
@@ -475,34 +498,39 @@ impl GitAccessor {
         }
 
         // 执行获取操作
-        remote.fetch(&[] as &[&str], Some(&mut fetch_options), None)?;
+        remote
+            .fetch(&[] as &[&str], Some(&mut fetch_options), None)
+            .owe_data()?;
 
         // 更新远程引用
-        remote.update_tips(
-            None,
-            RemoteUpdateFlags::UPDATE_FETCHHEAD,
-            git2::AutotagOption::All,
-            None,
-        )?;
+        remote
+            .update_tips(
+                None,
+                RemoteUpdateFlags::UPDATE_FETCHHEAD,
+                git2::AutotagOption::All,
+                None,
+            )
+            .owe_data()?;
 
         Ok(())
     }
 
     /// 处理检出目标（按优先级：rev > tag > branch）
-    fn checkout_target(&self, addr: &GitRepository, repo: &Repository) -> Result<(), git2::Error> {
+    fn checkout_target(&self, addr: &GitRepository, repo: &Repository) -> AddrResult<()> {
         if let Some(rev) = addr.rev() {
             self.checkout_revision(addr, repo, rev)
         } else if let Some(tag) = addr.tag() {
-            self.checkout_tag(addr, repo, tag)
+            self.checkout_tag(addr, repo, tag).owe_data()
         } else if let Some(branch) = addr.branch() {
             self.checkout_branch(addr, repo, branch)
         } else {
             // 默认检出默认分支
-            let head = repo.head()?;
+            let head = repo.head().owe_data()?;
             let _name = head
                 .name()
-                .ok_or_else(|| git2::Error::from_str("无法获取 HEAD 名称"))?;
-            repo.checkout_head(Some(&mut CheckoutBuilder::new().force()))?;
+                .ok_or_else(|| AddrReason::from_data("无法获取 HEAD 名称", None).to_err())?;
+            repo.checkout_head(Some(&mut CheckoutBuilder::new().force()))
+                .owe_data()?;
             Ok(())
         }
     }
@@ -513,10 +541,11 @@ impl GitAccessor {
         _addr: &GitRepository,
         repo: &Repository,
         rev: &str,
-    ) -> Result<(), git2::Error> {
-        let obj = repo.revparse_single(rev)?;
-        repo.checkout_tree(&obj, Some(&mut CheckoutBuilder::new().force()))?;
-        repo.set_head_detached(obj.id())?;
+    ) -> AddrResult<()> {
+        let obj = repo.revparse_single(rev).owe_data()?;
+        repo.checkout_tree(&obj, Some(&mut CheckoutBuilder::new().force()))
+            .owe_data()?;
+        repo.set_head_detached(obj.id()).owe_data()?;
         Ok(())
     }
 
@@ -540,16 +569,17 @@ impl GitAccessor {
         _addr: &GitRepository,
         repo: &Repository,
         branch: &str,
-    ) -> Result<(), git2::Error> {
+    ) -> AddrResult<()> {
         // 尝试查找本地分支
         if let Ok(b) = repo.find_branch(branch, BranchType::Local) {
             // 切换到本地分支
             let refname = b
                 .get()
                 .name()
-                .ok_or_else(|| git2::Error::from_str("无效的分支名称"))?;
-            repo.set_head(refname)?;
-            repo.checkout_head(Some(&mut CheckoutBuilder::new().force()))?;
+                .ok_or_else(|| AddrReason::from_biz("无效的分支名称").to_err())?;
+            repo.set_head(refname).owe_data()?;
+            repo.checkout_head(Some(&mut CheckoutBuilder::new().force()))
+                .owe_data()?;
             return Ok(());
         }
 
@@ -557,87 +587,21 @@ impl GitAccessor {
         let remote_branch_name = format!("origin/{branch}");
         if let Ok(b) = repo.find_branch(&remote_branch_name, BranchType::Remote) {
             // 创建本地分支并设置跟踪
-            let commit = b.get().peel_to_commit()?;
-            let mut new_branch = repo.branch(branch, &commit, false)?;
-            new_branch.set_upstream(Some(&format!("origin/{branch}")))?;
+            let commit = b.get().peel_to_commit().owe_data()?;
+            let mut new_branch = repo.branch(branch, &commit, false).owe_data()?;
+            new_branch
+                .set_upstream(Some(&format!("origin/{branch}")))
+                .owe_data()?;
 
             // 切换到新分支
             let refname = format!("refs/heads/{branch}");
-            repo.set_head(&refname)?;
-            repo.checkout_head(Some(&mut CheckoutBuilder::new().force()))?;
+            repo.set_head(&refname).owe_data()?;
+            repo.checkout_head(Some(&mut CheckoutBuilder::new().force()))
+                .owe_data()?;
             return Ok(());
         }
 
-        Err(git2::Error::from_str(&format!("分支 '{branch}' 不存在",)))
-    }
-
-    /// 提交
-    fn submit(
-        &self,
-        addr: &GitRepository,
-        repo: &Repository,
-        branch: &str,
-    ) -> Result<(), git2::Error> {
-        info!("git push origin {}", &branch);
-        let branch_path = format!("refs/heads/{branch}",);
-        // 拉取远程进行更新
-        self.fetch_updates(addr, repo)?;
-        // 合并远程更新
-        let fetch_head = repo.find_annotated_commit(repo.refname_to_id("FETCH_HEAD")?)?;
-        let (analysis, _) = repo.merge_analysis(&[&fetch_head])?;
-
-        if analysis.is_fast_forward() {
-            let mut reference = repo.find_reference(&branch_path)?;
-            reference.set_target(fetch_head.id(), "Fast-forward")?;
-            repo.set_head(&branch_path)?;
-            repo.checkout_head(Some(git2::build::CheckoutBuilder::default().force()))?;
-        } else if analysis.is_normal() {
-            // 出现合并冲突问题
-            return Err(git2::Error::from_str("Merge conflicts detected"));
-        }
-        // 检查是否有修改
-        let mut status_option = git2::StatusOptions::new();
-        status_option.include_untracked(true);
-        status_option.include_ignored(false);
-        let local_repo_status = repo.statuses(Some(&mut status_option))?;
-        if local_repo_status.is_empty() {
-            return Ok(());
-        }
-        let mut origin = repo.find_remote("origin")?;
-
-        // git add 操作
-        let mut index = repo.index()?;
-        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)?;
-        index.write()?;
-
-        let tree = repo.find_tree(index.write_tree()?)?;
-        let head = repo.head()?.resolve()?;
-        let parent_commit = repo.find_commit(head.target().unwrap())?;
-        let signature = git2::Signature::now("dayu-spec", "dayu-sec-spec@dy-sec.com")?;
-        repo.commit(
-            Some("HEAD"),
-            &signature,
-            &signature,
-            "spec:auto commit",
-            &tree,
-            &[&parent_commit],
-        )?;
-        // 设置认证信息
-        let mut push_options = PushOptions::new();
-        push_options.remote_callbacks(self.build_remote_callbacks(addr));
-
-        // 配置代理选项
-        if let Some(proxy_config) = self.ctrl.as_ref().and_then(|x| x.proxy_git(addr)) {
-            let mut proxy_options = git2::ProxyOptions::new();
-            proxy_options.url(proxy_config.url());
-            push_options.proxy_options(proxy_options);
-        }
-        origin.push(
-            &[&format!("{branch_path}:{branch_path}",)],
-            Some(&mut push_options),
-        )?;
-        info!("push complete");
-        Ok(())
+        AddrReason::from_biz(format!("分支 '{branch}' 不存在")).err_result()
     }
 }
 
@@ -1022,9 +986,9 @@ mod tests {
 
         assert!(result.is_err());
 
-        // 测试不存在的仓库
+        // 测试不存在的仓库 - 使用明显无效的协议
         let non_existent_addr =
-            GitRepository::from("https://github.com/nonexistent/repo123456.git");
+            GitRepository::from("nonexistent-protocol://invalid-server.com/repo.git");
         let non_existent_result = invalid_accessor
             .download_to_local(
                 &Address::Git(non_existent_addr),

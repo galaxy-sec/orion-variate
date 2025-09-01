@@ -289,11 +289,11 @@ mod tests {
         let metadata = options.metadata_dict();
         assert_eq!(metadata.len(), 2);
         assert_eq!(
-            metadata.get("key1"),
+            metadata.get("KEY1"),
             Some(&ValueType::String("value1".to_string()))
         );
         assert_eq!(
-            metadata.get("key2"),
+            metadata.get("KEY2"),
             Some(&ValueType::String("value2".to_string()))
         );
     }

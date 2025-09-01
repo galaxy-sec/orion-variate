@@ -724,7 +724,7 @@ dependencies = [
  "log",
  "nu-ansi-term",
  "regex",
- "thiserror 2.0.15",
+ "thiserror 2.0.16",
 ]
 
 [[package]]
@@ -750,9 +750,9 @@ checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
 
 [[package]]
 name = "form_urlencoded"
-version = "1.2.1"
+version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e13624c2627564efccf4934284bdd98cbaa14e79b0b5a141218e507b3a823456"
+checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
 dependencies = [
  "percent-encoding",
 ]
@@ -1265,9 +1265,9 @@ dependencies = [
 
 [[package]]
 name = "idna"
-version = "1.0.3"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "686f825264d630750a544639377bae737628043f20d38bbc029e8f29ea968a7e"
+checksum = "3b0875f23caa03898994f6ddc501886a45c7d3d62d04d2d90788d47be1b1e4de"
 dependencies = [
  "idna_adapter",
  "smallvec",
@@ -1286,9 +1286,9 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "2.10.0"
+version = "2.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe4cd85333e22411419a0bcae1297d25e58c9443848b11dc6a86fefe8c78a661"
+checksum = "f2481980430f9f78649238835720ddccc57e52df14ffce1c6f37391d61b563e9"
 dependencies = [
  "equivalent",
  "hashbrown",
@@ -1706,68 +1706,56 @@ dependencies = [
 
 [[package]]
 name = "orion-error"
-version = "0.3.1"
+version = "0.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c9bfb02d84fac6709506af6d5c984031be8592e28297b29cfec0b6a32de67a8"
+checksum = "ac3c3c07d39f70ce6fdcdc5f5eff8494454af616bbf7eeed44e985236ea4d5bf"
 dependencies = [
  "derive-getters",
  "derive_more",
+ "log",
  "serde",
- "thiserror 2.0.15",
+ "thiserror 2.0.16",
 ]
 
 [[package]]
-name = "orion-error"
-version = "0.4.0"
-source = "git+https://github.com/galaxy-sec/orion-error.git?tag=v0.4.0#f0c8c95ef47aa44f3d80ffe991988cfd6b6a97e3"
+name = "orion_conf"
+version = "0.1.5"
+source = "git+https://github.com/galaxy-sec/orion-conf.git?tag=v0.1.5#68208d52325f47586f96978d8bee0d17d628bbab"
 dependencies = [
- "derive-getters",
- "derive_more",
- "serde",
- "thiserror 2.0.15",
-]
-
-[[package]]
-name = "orion_common"
-version = "0.3.0"
-source = "git+https://github.com/galaxy-sec/orion-common.git?tag=v0.3.0#918ef5bd7676bc50d76004d452b55858b43f13fe"
-dependencies = [
- "anyhow",
  "chrono",
  "derive-getters",
  "derive_more",
- "ipnet",
- "orion-error 0.4.0",
+ "orion-error",
  "serde",
  "serde_derive",
  "serde_ini",
  "serde_json",
  "serde_yaml",
- "thiserror 2.0.15",
+ "thiserror 2.0.16",
  "toml",
- "wildmatch",
 ]
 
 [[package]]
 name = "orion_infra"
-version = "0.2.0"
-source = "git+https://github.com/galaxy-sec/orion-infra?tag=v0.3.0#56db20a9a3f6f5e9c68bc9e4a6dc4cdb9ecb28b6"
+version = "0.3.2"
+source = "git+https://github.com/galaxy-sec/orion-infra?tag=v0.3.2#ea91a50b252f5b696d6bac5e341175be54521da8"
 dependencies = [
  "anyhow",
  "derive_more",
  "flexi_logger",
  "log",
- "orion-error 0.3.1",
+ "orion-error",
  "scopeguard",
  "serde",
  "serde_derive",
- "thiserror 2.0.15",
+ "serde_yaml",
+ "thiserror 2.0.16",
  "toml",
 ]
 
 [[package]]
 name = "orion_variate"
-version = "0.7.8"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1789,8 +1777,8 @@ dependencies = [
  "indexmap",
  "indicatif",
  "log",
- "orion-error 0.4.0",
- "orion_common",
+ "orion-error",
+ "orion_conf",
  "orion_infra",
  "os_info",
  "reqwest",
@@ -1803,7 +1791,7 @@ dependencies = [
  "serde_yaml",
  "tar",
  "tempfile",
- "thiserror 2.0.15",
+ "thiserror 2.0.16",
  "tokio",
  "tokio-util",
  "toml",
@@ -1857,9 +1845,9 @@ dependencies = [
 
 [[package]]
 name = "percent-encoding"
-version = "2.3.1"
+version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
+checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "petgraph"
@@ -2560,15 +2548,15 @@ dependencies = [
 
 [[package]]
 name = "tempfile"
-version = "3.20.0"
+version = "3.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8a64e3985349f2441a1a9ef0b853f869006c3855f2cda6862a94d26ebb9d6a1"
+checksum = "15b61f8f20e3a6f7e0649d825294eaf317edce30f82cf6026e7e4cb9222a7d1e"
 dependencies = [
  "fastrand",
  "getrandom 0.3.3",
  "once_cell",
  "rustix",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -2593,11 +2581,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.15"
+version = "2.0.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80d76d3f064b981389ecb4b6b7f45a0bf9fdac1d5b9204c7bd6714fecc302850"
+checksum = "3467d614147380f2e4e374161426ff399c91084acd2363eaf549172b3d5e60c0"
 dependencies = [
- "thiserror-impl 2.0.15",
+ "thiserror-impl 2.0.16",
 ]
 
 [[package]]
@@ -2613,9 +2601,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.15"
+version = "2.0.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44d29feb33e986b6ea906bd9c3559a856983f92371b3eaa5e83782a351623de0"
+checksum = "6c5e1be1c48b9172ee610da68fd9cd2770e7a4056cb3fc98710ee6906f0c7960"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2925,13 +2913,14 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "url"
-version = "2.5.4"
+version = "2.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32f8b686cadd1473f4bd0117a5d28d36b1ade384ea9b5069a1c40aefed7fda60"
+checksum = "08bc136a29a3d1758e07a9cca267be308aeebf5cfd5a10f3f67ab2097683ef5b"
 dependencies = [
  "form_urlencoded",
  "idna",
  "percent-encoding",
+ "serde",
 ]
 
 [[package]]
@@ -3354,9 +3343,9 @@ checksum = "271414315aff87387382ec3d271b52d7ae78726f5d44ac98b4f4030c91880486"
 
 [[package]]
 name = "winnow"
-version = "0.7.12"
+version = "0.7.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3edebf492c8125044983378ecb5766203ad3b4c2f7a922bd7dd207f6d443e95"
+checksum = "21a0236b59786fed61e2a80582dd500fe61f18b5dca67a4a067d0bc9039339cf"
 dependencies = [
  "memchr",
 ]

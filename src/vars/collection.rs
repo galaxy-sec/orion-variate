@@ -1,170 +1,367 @@
-use std::path::Path;
-
-use derive_getters::Getters;
+use getset::Getters;
 use indexmap::IndexMap;
-use orion_error::ErrorOwe;
+use orion_conf::StorageLoadEvent;
 use serde_derive::{Deserialize, Serialize};
 
-use orion_common::serde::Yamlable;
+use crate::vars::VarToValue;
 
-use super::{EnvDict, EnvEvalable, ValueDict, VarDefinition, error::VarsResult};
+use super::{ValueDict, VarDefinition, definition::Mutability};
 
 #[derive(Getters, Clone, Debug, Serialize, Deserialize, PartialEq, Default)]
+#[getset(get = "pub")]
 //#[serde(transparent)]
 pub struct VarCollection {
-    vars: Vec<VarDefinition>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty", rename = "immutable")]
+    immutable_vars: Vec<VarDefinition>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty", rename = "system")]
+    system_vars: Vec<VarDefinition>,
+
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        rename = "module",
+        alias = "vars"
+    )]
+    module_vars: Vec<VarDefinition>,
+}
+impl StorageLoadEvent for VarCollection {
+    fn loaded_event_do(&mut self) {
+        self.mark_vars_scope();
+    }
+}
+impl VarToValue<ValueDict> for Vec<VarDefinition> {
+    fn to_val(&self) -> ValueDict {
+        let mut dict = ValueDict::new();
+        for var in self {
+            dict.insert(var.name().to_string(), var.value().clone());
+        }
+        dict
+    }
 }
 impl VarCollection {
     pub fn define(vars: Vec<VarDefinition>) -> Self {
-        Self { vars }
+        let mut immutable_vars = Vec::new();
+        let mut public_vars = Vec::new();
+        let mut modul_vars = Vec::new();
+
+        for v in vars {
+            match v.mutability() {
+                Mutability::Immutable => {
+                    immutable_vars.push(v);
+                }
+                Mutability::System => {
+                    public_vars.push(v);
+                }
+                Mutability::Module => modul_vars.push(v),
+            }
+        }
+        Self {
+            immutable_vars,
+            system_vars: public_vars,
+            module_vars: modul_vars,
+        }
     }
+    pub fn mark_vars_scope(&mut self) {
+        for var in self.immutable_vars.iter_mut() {
+            var.set_mutability(Mutability::Immutable);
+        }
+        for var in self.system_vars.iter_mut() {
+            var.set_mutability(Mutability::System);
+        }
+        for var in self.module_vars.iter_mut() {
+            var.set_mutability(Mutability::Module);
+        }
+    }
+
     pub fn value_dict(&self) -> ValueDict {
         let mut dict = ValueDict::new();
-        for var in &self.vars {
-            dict.insert(var.name().to_string(), var.value().clone()); // 可能需要 into() 转换
+        for var in self.immutable_vars() {
+            dict.insert(var.name().to_string(), var.value().clone()); // String 自动转换为 UpperKey
+        }
+        for var in self.system_vars() {
+            dict.insert(var.name().to_string(), var.value().clone()); // String 自动转换为 UpperKey
+        }
+        for var in self.module_vars() {
+            dict.insert(var.name().to_string(), var.value().clone()); // String 自动转换为 UpperKey
         }
         dict
     }
     // 基于VarType的name进行合并，相同的name会被覆盖
-    pub fn merge(&self, other: VarCollection) -> Self {
-        let mut merged = IndexMap::new();
-        let mut order = Vec::new();
-
-        // 先添加self的变量并记录顺序
-        for var in &self.vars {
-            let name = var.name().to_string();
-            if !merged.contains_key(&name) {
-                order.push(name.clone());
-            }
-            merged.insert(name, var.clone());
+    pub fn merge(self, other: VarCollection) -> Self {
+        let immutable_vars = merge_vec(self.immutable_vars, other.immutable_vars, false);
+        let public_vars = merge_vec(self.system_vars, other.system_vars, true);
+        let modul_vars = merge_vec(self.module_vars, other.module_vars, true);
+        Self {
+            immutable_vars,
+            system_vars: public_vars,
+            module_vars: modul_vars,
         }
-
-        // 添加other的变量，同名会覆盖
-        for var in other.vars {
-            let name = var.name().to_string();
-            if !merged.contains_key(&name) {
-                order.push(name.clone());
-            }
-            merged.insert(name, var);
-        }
-
-        // 按原始顺序重新排序
-        let mut result = Vec::new();
-        for name in order {
-            if let Some(var) = merged.get(&name) {
-                result.push(var.clone());
-            }
-        }
-
-        Self { vars: result }
-    }
-    pub fn eval_from_file(dict: &EnvDict, file_path: &Path) -> VarsResult<Self> {
-        let mut cur_dict = dict.clone();
-        let ins = VarCollection::from_yml(file_path).owe_res()?;
-        Ok(ins.eval_import(&mut cur_dict))
     }
 
-    fn eval_import(self, dict: &mut ValueDict) -> Self {
-        let mut vars = Vec::new();
-        for v in self.vars {
-            let e_v = v.value().clone().env_eval(dict);
-            dict.insert(v.name(), e_v.clone());
-            vars.push(VarDefinition::from((v.name().as_str(), e_v)));
+    pub fn merge_system(self, other: VarCollection) -> Self {
+        let public_vars = merge_vec(self.system_vars, other.system_vars, true);
+        Self {
+            immutable_vars: Vec::new(),
+            system_vars: public_vars,
+            module_vars: Vec::new(),
         }
-        Self { vars }
     }
+}
+fn merge_vec(
+    my: Vec<VarDefinition>,
+    other: Vec<VarDefinition>,
+    is_over: bool,
+) -> Vec<VarDefinition> {
+    let mut target = Vec::new();
+    let mut merged = IndexMap::new();
+    for var in my {
+        //immutable_vars.push(var)
+        merged.insert(var.name().clone(), var);
+    }
+    for var in other {
+        if is_over || !merged.contains_key(var.name()) {
+            merged.insert(var.name().clone(), var);
+        }
+    }
+    for var in merged.into_values() {
+        target.push(var);
+    }
+    target
 }
 
 #[cfg(test)]
 mod tests {
     use crate::vars::ValueType;
+    use crate::vars::definition::Mutability;
 
     use super::*;
-    use std::io::Write;
-    use tempfile::NamedTempFile;
+    use serde_json;
+    use serde_yaml;
 
-    // 辅助函数：创建临时测试文件
-    fn create_temp_file(content: &str) -> NamedTempFile {
-        let mut file = NamedTempFile::new().unwrap();
-        write!(file, "{content}",).unwrap();
-        file
-    }
     #[test]
-    fn test_eval_from_file_basic() {
-        // 准备测试数据
-        let file = create_temp_file(
-            r#"
-        vars:
-          - name: "username"
-            value: "admin"
-          - name: "account"
-            value: ${username}
-        "#,
+    fn test_define_classification() {
+        // 创建测试变量
+        let vars = vec![
+            VarDefinition::from(("immutable_var", "immutable_value"))
+                .with_mutability(Mutability::Immutable),
+            VarDefinition::from(("public_var", "public_value")).with_mutability(Mutability::System),
+            VarDefinition::from(("model_var", "model_value")).with_mutability(Mutability::Module),
+        ];
+
+        let collection = VarCollection::define(vars);
+
+        // 验证分类正确性
+        assert_eq!(collection.immutable_vars().len(), 1);
+        assert_eq!(collection.immutable_vars()[0].name(), "immutable_var");
+
+        assert_eq!(collection.system_vars().len(), 1);
+        assert_eq!(collection.system_vars()[0].name(), "public_var");
+
+        assert_eq!(collection.module_vars().len(), 1);
+        assert_eq!(collection.module_vars()[0].name(), "model_var");
+    }
+
+    #[test]
+    fn test_value_dict_generation() {
+        let vars = vec![
+            VarDefinition::from(("immutable_var", "immutable_value"))
+                .with_mutability(Mutability::Immutable),
+            VarDefinition::from(("public_var", "public_value")).with_mutability(Mutability::System),
+            VarDefinition::from(("model_var", "model_value")).with_mutability(Mutability::Module),
+            VarDefinition::from(("numeric_var", 42u64)).with_mutability(Mutability::System),
+        ];
+
+        let collection = VarCollection::define(vars);
+        let dict = collection.value_dict();
+
+        // 验证字典包含所有变量
+        assert_eq!(dict.len(), 4);
+        assert_eq!(
+            dict.get("IMMUTABLE_VAR"),
+            Some(&ValueType::from("immutable_value"))
+        );
+        assert_eq!(
+            dict.get("PUBLIC_VAR"),
+            Some(&ValueType::from("public_value"))
+        );
+        assert_eq!(dict.get("MODEL_VAR"), Some(&ValueType::from("model_value")));
+        assert_eq!(dict.get("NUMERIC_VAR"), Some(&ValueType::from(42u64)));
+    }
+
+    #[test]
+    fn test_merge_collections() {
+        let vars1 = vec![
+            VarDefinition::from(("var1", "value1_from_1")).with_mutability(Mutability::System),
+            VarDefinition::from(("var2", "value2_from_1")).with_mutability(Mutability::Immutable),
+            VarDefinition::from(("unique_to_1", "unique")).with_mutability(Mutability::Module),
+        ];
+
+        let vars2 = vec![
+            VarDefinition::from(("var1", "value1_from_2")).with_mutability(Mutability::System),
+            VarDefinition::from(("var3", "value3_from_2")).with_mutability(Mutability::Module),
+            VarDefinition::from(("unique_to_2", "unique2")).with_mutability(Mutability::System),
+        ];
+
+        let collection1 = VarCollection::define(vars1);
+        let collection2 = VarCollection::define(vars2);
+
+        let merged = collection1.merge(collection2);
+
+        // 验证合并结果
+        assert_eq!(merged.system_vars().len(), 2); // unique_to_1, unique_to_2
+        assert_eq!(merged.immutable_vars().len(), 1); // var2
+        assert_eq!(merged.module_vars().len(), 2); // var3, unique_to_1
+
+        // 验证重复变量被正确处理
+        let dict = merged.value_dict();
+        assert_eq!(dict.get("VAR1"), Some(&ValueType::from("value1_from_2"))); // 第一个集合的值优先
+        assert_eq!(dict.get("VAR2"), Some(&ValueType::from("value2_from_1")));
+        assert_eq!(dict.get("VAR3"), Some(&ValueType::from("value3_from_2")));
+        assert_eq!(dict.get("UNIQUE_TO_1"), Some(&ValueType::from("unique")));
+        assert_eq!(dict.get("UNIQUE_TO_2"), Some(&ValueType::from("unique2")));
+    }
+
+    #[test]
+    fn test_serialization_deserialization() {
+        let vars = vec![
+            VarDefinition::from(("string_var", "hello")).with_mutability(Mutability::Immutable),
+            VarDefinition::from(("bool_var", true)).with_mutability(Mutability::System),
+            // 注释掉 model 变量以测试空字段跳过
+            // VarDefinition::from(("number_var", 42u64)).with_mutability(ChangeScope::Model),
+        ];
+
+        let original = VarCollection::define(vars);
+
+        // 测试 JSON 序列化/反序列化
+        let json = serde_json::to_string(&original).unwrap();
+        let mut deserialized: VarCollection = serde_json::from_str(&json).unwrap();
+        deserialized.mark_vars_scope();
+        assert_eq!(original, deserialized);
+
+        // 测试 YAML 序列化/反序列化
+        let yaml = serde_yaml::to_string(&original).unwrap();
+        println!("{yaml:#}");
+        let mut deserialized_yaml: VarCollection = serde_yaml::from_str(&yaml).unwrap();
+        deserialized_yaml.mark_vars_scope();
+        assert_eq!(original, deserialized_yaml);
+
+        // 验证序列化优化：空的字段应该被跳过
+        // 首先检查 model_vars 是否为空
+        assert_eq!(
+            original.module_vars().len(),
+            0,
+            "model_vars should be empty"
+        );
+        // model_vars 为空，应该被跳过
+        assert!(
+            !json.contains("\"model\""),
+            "model field should be skipped in serialization"
+        );
+        // immutable_vars 不为空，应该包含
+        assert!(
+            json.contains("\"immutable\""),
+            "immutable field should be included in serialization"
         );
 
-        // 准备环境字典
-        let env_dict = EnvDict::new();
-
-        // 执行方法
-        let result = VarCollection::eval_from_file(&env_dict, file.path()).unwrap();
-
-        // 验证结果
-        assert_eq!(result.vars().len(), 2);
-        assert_eq!(result.vars()[0].name(), "username");
-        assert_eq!(result.vars()[0].value().clone(), ValueType::from("admin"));
-        assert_eq!(result.vars()[1].name(), "account");
-        assert_eq!(result.vars()[1].value().clone(), ValueType::from("admin"));
+        // 调试输出
+        println!("JSON output: {}", json);
     }
 
     #[test]
-    fn test_merge_vars() {
-        let vars1 = VarCollection::define(vec![
-            VarDefinition::from(("a", "1")),
-            VarDefinition::from(("b", true)),
-            VarDefinition::from(("c", 10)),
-        ]);
+    fn test_serialization_field_optimization() {
+        // 测试 skip_serializing_if 逻辑
+        let empty_collection = VarCollection::default();
+        let json = serde_json::to_string(&empty_collection).unwrap();
 
-        let vars2 = VarCollection::define(vec![
-            VarDefinition::from(("b", false)),
-            VarDefinition::from(("d", 3.33)),
-        ]);
+        // 空集合应该序列化为空对象 {}
+        assert_eq!(json, "{}");
 
-        let merged = vars1.merge(vars2);
+        // 只有 public 变量的集合
+        let vars =
+            vec![VarDefinition::from(("public_var", "value")).with_mutability(Mutability::System)];
+        let public_only = VarCollection::define(vars);
+        let json_public = serde_json::to_string(&public_only).unwrap();
 
-        // 验证合并后的变量数量
-        assert_eq!(merged.vars().len(), 4);
-
-        // 验证变量顺序
-        let names: Vec<&str> = merged.vars().iter().map(|v| v.name().as_str()).collect();
-        assert_eq!(names, vec!["a", "b", "c", "d"]);
-
-        // 验证变量b被正确覆盖
-        if let ValueType::Bool(var) = &merged.vars()[1].value() {
-            assert_eq!(var, &false);
-        } else {
-            panic!("变量b类型错误");
-        }
+        // 应该只包含 public 字段
+        assert!(json_public.contains("\"system\""));
+        assert!(!json_public.contains("\"immutable\""));
+        assert!(!json_public.contains("\"module\""));
     }
 
     #[test]
-    fn test_toml_serialization() {
-        let collection = VarCollection::define(vec![
-            VarDefinition::from(("name", "Alice")),
-            VarDefinition::from(("age", 30)),
-            VarDefinition::from(("active", true)),
-        ]);
+    fn test_empty_collection() {
+        let empty_vars = vec![];
+        let collection = VarCollection::define(empty_vars);
 
-        // 序列化为 TOML 字符串
-        let toml_string = toml::to_string(&collection).expect("序列化失败");
-        println!("{toml_string}",);
+        assert_eq!(collection.immutable_vars().len(), 0);
+        assert_eq!(collection.system_vars().len(), 0);
+        assert_eq!(collection.module_vars().len(), 0);
 
-        // 反序列化测试
-        let deserialized: VarCollection = toml::from_str(&toml_string).expect("反序列化失败");
+        let dict = collection.value_dict();
+        assert_eq!(dict.len(), 0);
+    }
 
-        assert_eq!(collection, deserialized);
-        assert_eq!(deserialized.vars().len(), 3);
-        assert_eq!(deserialized.vars()[0].name(), "name");
-        assert_eq!(deserialized.vars()[1].name(), "age");
-        assert_eq!(deserialized.vars()[2].name(), "active");
+    #[test]
+    fn test_duplicate_variable_names() {
+        let vars = vec![
+            VarDefinition::from(("duplicate", "first")).with_mutability(Mutability::Immutable),
+            VarDefinition::from(("duplicate", "second")).with_mutability(Mutability::System),
+            VarDefinition::from(("duplicate", "third")).with_mutability(Mutability::Module),
+        ];
+
+        let collection = VarCollection::define(vars);
+
+        // 验证每个作用域都有一个重复名称的变量
+        assert_eq!(collection.immutable_vars().len(), 1);
+        assert_eq!(collection.system_vars().len(), 1);
+        assert_eq!(collection.module_vars().len(), 1);
+
+        // 验证 value_dict 包含所有变量（尽管名称相同，value_dict 是 IndexMap，后插入的会覆盖先插入的）
+        let dict = collection.value_dict();
+        // 由于 value_dict 按 immutable -> public -> model 的顺序插入，model 会覆盖前面同名的
+        assert_eq!(dict.get("DUPLICATE"), Some(&ValueType::from("third")));
+    }
+
+    #[test]
+    fn test_special_characters_in_names() {
+        let vars = vec![
+            VarDefinition::from(("normal_name", "normal")).with_mutability(Mutability::System),
+            VarDefinition::from(("name-with-dashes", "dashed")).with_mutability(Mutability::System),
+            VarDefinition::from(("name_with_underscores", "underscored"))
+                .with_mutability(Mutability::System),
+            VarDefinition::from(("name.with.dots", "dotted")).with_mutability(Mutability::System),
+        ];
+
+        let collection = VarCollection::define(vars);
+        let dict = collection.value_dict();
+
+        // 验证特殊字符名称能正确处理
+        assert_eq!(dict.get("NORMAL_NAME"), Some(&ValueType::from("normal")));
+        assert_eq!(
+            dict.get("NAME-WITH-DASHES"),
+            Some(&ValueType::from("dashed"))
+        );
+        assert_eq!(
+            dict.get("NAME_WITH_UNDERSCORES"),
+            Some(&ValueType::from("underscored"))
+        );
+        assert_eq!(dict.get("NAME.WITH.DOTS"), Some(&ValueType::from("dotted")));
+    }
+
+    #[test]
+    fn test_default_collection() {
+        let default_collection = VarCollection::default();
+
+        assert_eq!(default_collection.immutable_vars().len(), 0);
+        assert_eq!(default_collection.system_vars().len(), 0);
+        assert_eq!(default_collection.module_vars().len(), 0);
+
+        let dict = default_collection.value_dict();
+        assert_eq!(dict.len(), 0);
+
+        // 测试序列化
+        let json = serde_json::to_string(&default_collection).unwrap();
+        assert_eq!(json, "{}");
     }
 }

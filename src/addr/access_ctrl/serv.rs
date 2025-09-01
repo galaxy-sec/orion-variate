@@ -1,7 +1,7 @@
 use std::{path::PathBuf, rc::Rc};
 
 use getset::Getters;
-use orion_common::serde::Yamlable;
+use orion_conf::Yamlable;
 use orion_error::{ErrorOwe, ErrorWith};
 
 use crate::vars::{EnvDict, EnvEvalable};

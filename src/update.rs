@@ -36,6 +36,14 @@ impl From<(usize, ValueDict)> for DownloadOptions {
         }
     }
 }
+impl From<(bool, ValueDict)> for DownloadOptions {
+    fn from(value: (bool, ValueDict)) -> Self {
+        match value.0 {
+            false => Self::new(UpdateScope::None, value.1),
+            true => Self::new(UpdateScope::RemoteCache, value.1),
+        }
+    }
+}
 
 #[derive(Clone, Debug, Default)]
 pub struct DownloadOptions {

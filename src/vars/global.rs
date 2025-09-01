@@ -41,7 +41,11 @@ fn format_os_sys() -> String {
 /// 从当前目录开始向上查找 _gal/project.toml 文件
 /// 如果找到则返回其绝对路径的PathBuf，未找到则返回None
 pub fn find_project_define() -> Option<PathBuf> {
-    let mut current_dir = std::env::current_dir().expect("Failed to get current directory");
+    let current_dir = std::env::current_dir().expect("Failed to get current directory");
+    find_project_define_base(current_dir)
+}
+pub fn find_project_define_base(base: PathBuf) -> Option<PathBuf> {
+    let mut current_dir = base;
 
     loop {
         let project_file = current_dir.join("_gal").join("project.toml");
@@ -58,6 +62,7 @@ pub fn find_project_define() -> Option<PathBuf> {
 
     None
 }
+
 pub struct WorkDir {
     original_dir: PathBuf,
 }

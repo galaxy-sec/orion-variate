@@ -199,6 +199,8 @@ mod tests {
     #[test]
     fn test_default_value() {
         unsafe { env::remove_var("DEFAULT_TEST_VAR") };
+        // 确保环境变量真的被移除了
+        assert!(env::var("DEFAULT_TEST_VAR").is_err());
         assert_eq!(
             expand_env_vars(&EnvDict::default(), "Hello ${DEFAULT_TEST_VAR:World}"),
             "Hello World"
@@ -229,6 +231,8 @@ mod tests {
     fn test_default_value_with_dict_but_no_env() {
         let dict = EnvDict::new();
         unsafe { env::remove_var("DEFAULT_TEST_VAR") };
+        // 确保环境变量真的被移除了
+        assert!(env::var("DEFAULT_TEST_VAR").is_err());
         assert_eq!(
             expand_env_vars(&dict, "Hello ${DEFAULT_TEST_VAR:World}"),
             "Hello World"
