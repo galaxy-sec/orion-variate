@@ -346,4 +346,111 @@ mod tests {
         assert_eq!(dict.ucase_get("123"), Some(&ValueType::from("number")));
         assert_eq!(dict.ucase_get("123"), Some(&ValueType::from("number")));
     }
+
+    #[test]
+    fn test_dict_yaml_block_serialization() {
+        // 创建包含多行块数据的 ValueDict
+        let mut dict = ValueDict::new();
+        dict.insert(
+            "block_text",
+            ValueType::from(
+                "This is a multi-line\ntext block that preserves\nline breaks and formatting\n",
+            ),
+        );
+        dict.insert(
+            "indented_block",
+            ValueType::from(
+                "This block has indentation\nthat should be preserved\nacross multiple lines\n",
+            ),
+        );
+        dict.insert("special_chars", ValueType::from("Contains special characters:\n- Tabs:\t\n- Quotes: \"hello\"\n- Backslashes: \\n\\r\\t"));
+
+        // 序列化为 YAML
+        let yaml_output = serde_yaml::to_string(&dict).unwrap();
+        println!("YAML 输出:\n{}", yaml_output);
+
+        // 验证序列化结果包含 "|" 符号（YAML 块格式）
+        assert!(
+            yaml_output.contains("|"),
+            "YAML 输出应该包含 '|' 符号表示块数据"
+        );
+        assert!(
+            yaml_output.contains("This is a multi-line"),
+            "YAML 输出应该包含多行文本内容"
+        );
+        assert!(
+            yaml_output.contains("line breaks and formatting"),
+            "YAML 输出应该包含完整的块文本内容"
+        );
+
+        // 反序列化测试 - 从字符串创建 YAML 块数据
+        let yaml_with_blocks = r#"
+BLOCK_TEXT: |
+  This is a multi-line
+  text block that preserves
+  line breaks and formatting
+
+INDENTED_BLOCK: |
+    This block has indentation
+    that should be preserved
+    across multiple lines
+
+SPECIAL_CHARS: "Contains special characters:\n- Tabs:\t\n- Quotes: \"hello\"\n- Backslashes: \\n\\r\\t"
+"#;
+
+        // 反序列化 YAML
+        let deserialized_dict: ValueDict = serde_yaml::from_str(yaml_with_blocks).unwrap();
+
+        // 验证反序列化结果
+        assert_eq!(
+            deserialized_dict.ucase_get("BLOCK_TEXT"),
+            Some(&ValueType::from(
+                "This is a multi-line\ntext block that preserves\nline breaks and formatting\n"
+            ))
+        );
+        assert_eq!(
+            deserialized_dict.ucase_get("INDENTED_BLOCK"),
+            Some(&ValueType::from(
+                "This block has indentation\nthat should be preserved\nacross multiple lines\n"
+            ))
+        );
+        assert_eq!(
+            deserialized_dict.ucase_get("SPECIAL_CHARS"),
+            Some(&ValueType::from(
+                "Contains special characters:\n- Tabs:\t\n- Quotes: \"hello\"\n- Backslashes: \\n\\r\\t"
+            ))
+        );
+
+        // 往返一致性测试
+        let roundtrip_yaml = serde_yaml::to_string(&deserialized_dict).unwrap();
+        let roundtrip_dict: ValueDict = serde_yaml::from_str(&roundtrip_yaml).unwrap();
+
+        // 验证往返序列化后数据保持一致
+        assert_eq!(
+            deserialized_dict, roundtrip_dict,
+            "往返序列化后数据应该保持一致"
+        );
+
+        // 验证块数据在往返过程中格式保持
+        assert_eq!(
+            roundtrip_dict.ucase_get("BLOCK_TEXT"),
+            Some(&ValueType::from(
+                "This is a multi-line\ntext block that preserves\nline breaks and formatting\n"
+            ))
+        );
+        assert_eq!(
+            roundtrip_dict.ucase_get("INDENTED_BLOCK"),
+            Some(&ValueType::from(
+                "This block has indentation\nthat should be preserved\nacross multiple lines\n"
+            ))
+        );
+        assert_eq!(
+            roundtrip_dict.ucase_get("SPECIAL_CHARS"),
+            Some(&ValueType::from(
+                "Contains special characters:\n- Tabs:\t\n- Quotes: \"hello\"\n- Backslashes: \\n\\r\\t"
+            ))
+        );
+
+        println!("往返序列化测试通过！块数据格式在序列化/反序列化过程中保持正确。");
+    }
 }
