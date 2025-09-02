@@ -65,4 +65,4 @@ futures-core = "0.3.31"
 [dev-dependencies]
 rstest = "0.26.0"
 tempfile = "3.21"
-httpmock = "0.7.0"
+mockito = "1.2"
