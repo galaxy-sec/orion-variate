@@ -379,22 +379,20 @@ mod tests {
     };
 
     use super::*;
-    use httpmock::{Method::GET, MockServer};
+    use mockito::Matcher;
     use orion_error::TestAssertWithMsg;
     use orion_infra::path::ensure_path;
 
     #[tokio::test(flavor = "current_thread")]
     async fn test_http_auth_download_no() -> AddrResult<()> {
         // 1. 配置模拟服务器
-        let server = MockServer::start();
-        let mock = server.mock(|when, then| {
-            when.method(GET)
-                .path("/wpflow.txt")
-                .header("Authorization", "Basic Z2VuZXJpYy0xNzQ3NTM1OTc3NjMyOjViMmM5ZTliN2YxMTFhZjUyZjAzNzVjMWZkOWQzNWNkNGQwZGFiYzM=");
-    then.status(200)
-        .header("content-type", "text/html; charset=UTF-8")
-        .body("download success");
-        });
+        let mut server = mockito::Server::new();
+        let mock = server.mock("GET", "/wpflow.txt")
+            .match_header("Authorization", Matcher::Exact("Basic Z2VuZXJpYy0xNzQ3NTM1OTc3NjMyOjViMmM5ZTliN2YxMTFhZjUyZjAzNzVjMWZkOWQzNWNkNGQwZGFiYzM=".to_string()))
+            .with_status(200)
+            .with_header("content-type", "text/html; charset=UTF-8")
+            .with_body("download success")
+            .create();
 
         // 2. 执行下载
         let temp_dir = PathBuf::from("./tests/temp");
@@ -402,10 +400,11 @@ mod tests {
         if test_file.exists() {
             std::fs::remove_file(&test_file).owe_res()?;
         }
-        let http_addr = HttpResource::from(server.url("/wpflow.txt")).with_credentials(
-            "generic-1747535977632",
-            "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
-        );
+        let http_addr = HttpResource::from(format!("{}/wpflow.txt", server.url()))
+            .with_credentials(
+                "generic-1747535977632",
+                "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
+            );
 
         let http_accessor = HttpAccessor::default();
         http_accessor
@@ -426,14 +425,13 @@ mod tests {
     async fn test_http_auth_download_with_redirect() -> AddrResult<()> {
         test_init();
         // 1. 配置模拟服务器
-        let server = MockServer::start();
-        let mock = server.mock(|when, then| {
-            when.method(GET).path("/success.txt")
-                .header("Authorization", "Basic Z2VuZXJpYy0xNzQ3NTM1OTc3NjMyOjViMmM5ZTliN2YxMTFhZjUyZjAzNzVjMWZkOWQzNWNkNGQwZGFiYzM=");
-            then.status(200)
-                .header("content-type", "text/html; charset=UTF-8")
-                .body("download success");
-        });
+        let mut server = mockito::Server::new();
+        let mock = server.mock("GET", "/success.txt")
+            .match_header("Authorization", Matcher::Exact("Basic Z2VuZXJpYy0xNzQ3NTM1OTc3NjMyOjViMmM5ZTliN2YxMTFhZjUyZjAzNzVjMWZkOWQzNWNkNGQwZGFiYzM=".to_string()))
+            .with_status(200)
+            .with_header("content-type", "text/html; charset=UTF-8")
+            .with_body("download success")
+            .create();
 
         // 2. 执行下载
         let temp_dir = PathBuf::from("./tests/temp");
@@ -443,14 +441,17 @@ mod tests {
             std::fs::remove_file(&test_file).owe_res()?;
         }
         let redirect = NetAccessCtrl::from_rule(
-            Rule::new(server.url("/unkonw*"), server.url("/success")),
+            Rule::new(
+                format!("{}/unkonw*", server.url()),
+                format!("{}/success", server.url()),
+            ),
             Some(AuthConfig::new(
                 "generic-1747535977632",
                 "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
             )),
             None,
         );
-        let http_addr = HttpResource::from(server.url("/unkonw.txt"));
+        let http_addr = HttpResource::from(format!("{}/unkonw.txt", server.url()));
 
         let http_accessor = HttpAccessor::default().with_ctrl(Some(redirect));
         http_accessor
@@ -487,15 +488,13 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn test_http_upload_post() -> AddrResult<()> {
         // 1. 配置模拟服务器
-        let server = MockServer::start();
-        let mock = server.mock(|when, then| {
-            when.method(httpmock::Method::POST)
-                .path("/upload")
-                .header_exists("content-type")  // 检查 multipart 头
-                .header("Authorization", "Basic Z2VuZXJpYy0xNzQ3NTM1OTc3NjMyOjViMmM5ZTliN2YxMTFhZjUyZjAzNzVjMWZkOWQzNWNkNGQwZGFiYzM=");
-            then.status(200)
-                .body("upload success");
-        });
+        let mut server = mockito::Server::new();
+        let mock = server.mock("POST", "/upload")
+            .match_header("content-type", Matcher::Regex("multipart/form-data.*".to_string()))
+            .match_header("Authorization", Matcher::Exact("Basic Z2VuZXJpYy0xNzQ3NTM1OTc3NjMyOjViMmM5ZTliN2YxMTFhZjUyZjAzNzVjMWZkOWQzNWNkNGQwZGFiYzM=".to_string()))
+            .with_status(200)
+            .with_body("upload success")
+            .create();
 
         // 2. 创建临时测试文件
         let temp_dir = tempfile::tempdir().owe_res()?;
@@ -505,7 +504,7 @@ mod tests {
             .owe_sys()?;
 
         // 3. 执行上传
-        let http_addr = HttpResource::from(server.url("/upload")).with_credentials(
+        let http_addr = HttpResource::from(format!("{}/upload", server.url())).with_credentials(
             "generic-1747535977632",
             "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
         );
@@ -523,13 +522,12 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn test_http_upload_put() -> AddrResult<()> {
         // 1. 配置模拟服务器
-        let server = MockServer::start();
-        let mock = server.mock(|when, then| {
-            when.method(httpmock::Method::PUT)
-                .path("/upload_put")
-                .header("Authorization", "Basic Z2VuZXJpYy0xNzQ3NTM1OTc3NjMyOjViMmM5ZTliN2YxMTFhZjUyZjAzNzVjMWZkOWQzNWNkNGQwZGFiYzM="); // 移除content-type检查，PUT请求不使用multipart
-            then.status(200).body("upload success");
-        });
+        let mut server = mockito::Server::new();
+        let mock = server.mock("PUT", "/upload_put")
+            .match_header("Authorization", Matcher::Exact("Basic Z2VuZXJpYy0xNzQ3NTM1OTc3NjMyOjViMmM5ZTliN2YxMTFhZjUyZjAzNzVjMWZkOWQzNWNkNGQwZGFiYzM=".to_string()))
+            .with_status(200)
+            .with_body("upload success")
+            .create();
 
         // 2. 创建临时测试文件
         let temp_dir = tempfile::tempdir().owe_res()?;
@@ -539,10 +537,11 @@ mod tests {
             .owe_sys()?;
 
         // 3. 执行上传
-        let http_addr = HttpResource::from(server.url("/upload_put")).with_credentials(
-            "generic-1747535977632",
-            "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
-        );
+        let http_addr = HttpResource::from(format!("{}/upload_put", server.url()))
+            .with_credentials(
+                "generic-1747535977632",
+                "5b2c9e9b7f111af52f0375c1fd9d35cd4d0dabc3",
+            );
         let http_accessor = HttpAccessor::default();
 
         http_accessor
