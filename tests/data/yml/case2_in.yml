@@ -1,0 +1,10 @@
+vector:
+  customConfigNamespace: ""
+    sinks:
+      vlogs:
+        request:
+          headers:
+            ProjectID: "0"
+
+# -- Add extra specs dynamically to this chart
+extraObjects: []

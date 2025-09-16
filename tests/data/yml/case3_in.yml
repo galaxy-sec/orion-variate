@@ -1,0 +1,25 @@
+nameOverride: ""
+fullnameOverride: ""
+
+# Base collector configuration.
+# Supports templating. To escape existing instances of {{ }}, use {{` <original content> `}}.
+# For example, {{ REDACTED_EMAIL }} becomes {{` {{ REDACTED_EMAIL }} `}}.
+config:
+  extensions:
+    health_check:
+      endpoint: 0.0.0.0:13133
+  receivers:
+    # Prometheus接收器 - 抓取指标
+    prometheus:
+      config:
+        global:
+          scrape_interval: 30s
+          scrape_timeout: 10s
+
+        scrape_configs:
+          # 自身监控
+          - job_name: opentelemetry-collector
+            scrape_interval: 10s
+            static_configs:
+              - targets:
+                  - localhost:8888

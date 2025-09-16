@@ -44,12 +44,12 @@ pub fn ignore_comment_line(status: &mut YmlStatus, input: &mut &str) -> ModalRes
                 .parse_next(input)?;
 
                 if opt(line_ending).parse_next(input)?.is_some() {
+                    // Preserve original blank lines: always emit the current line
+                    // followed by a line ending, even if it's only whitespace.
                     line += code;
-                    if !line.trim().is_empty() {
-                        out += line.as_str();
-                        out += "\n";
-                        line = String::new();
-                    }
+                    out += line.as_str();
+                    out += "\n";
+                    line = String::new();
                     continue;
                 }
 
@@ -62,6 +62,12 @@ pub fn ignore_comment_line(status: &mut YmlStatus, input: &mut &str) -> ModalRes
                 }
                 line += code;
                 if input.is_empty() {
+                    // EOF with pending code but no trailing newline.
+                    // Flush the remainder so the last line is not lost.
+                    if !line.trim().is_empty() {
+                        out.push_str(&line);
+                        line.clear();
+                    }
                     break;
                 }
                 // Block scalar start: | or > with optional chomping/indent modifiers, then line ending
@@ -207,12 +213,21 @@ pub fn ignore_comment_line(status: &mut YmlStatus, input: &mut &str) -> ModalRes
                     .context(wn_desc("comment-line_ending"))
                     .parse_next(input)?
                     .is_some();
+                // If this was an inline comment (there is already some code in `line`),
+                // we preserve the line ending. If the line contained only a comment,
+                // we drop it entirely and clear any buffer to avoid phantom blank lines.
                 if has_eol {
-                    line += "\n";
-                }
-                if !line.trim().is_empty() {
-                    out += &line;
-                    line = String::new();
+                    if !line.trim().is_empty() {
+                        line.push('\n');
+                        out += &line;
+                    }
+                    line.clear();
+                } else {
+                    // No trailing EOL (EOF). Keep code if present, without adding a newline.
+                    if !line.trim().is_empty() {
+                        out += &line;
+                    }
+                    line.clear();
                 }
                 *status = YmlStatus::Code;
             }
@@ -251,12 +266,9 @@ pub fn ignore_comment(input: &mut &str) -> ModalResult<String> {
         }
         //let mut line = till_line_ending.parse_next(input)?;
         let code = ignore_comment_line(&mut status, input)?;
-        if !code.trim().is_empty() {
-            out += code.as_str();
-            if opt(line_ending).parse_next(input)?.is_some() {
-                //out += "\n";
-            }
-        }
+        // Always append processed code; `ignore_comment_line` already
+        // handles whether to keep or drop blank lines and comment-only lines.
+        out += code.as_str();
     }
     Ok(out)
 }
@@ -487,24 +499,17 @@ end: ok
         let codes = remove_comment(yml.as_str()).assert();
         write_all(out_file, codes.as_str()).assert();
     }
-    #[test]
+        #[test]
     fn test_yaml_case2() {
-        let base_path = PathBuf::from("./test/data/yml");
-        std::fs::create_dir_all(&base_path).assert();
-
-        let codes = remove_comment(YAML_DATA).assert();
-        let excpet = r#"vector:
-  customConfigNamespace: ""
-    sinks:
-      vlogs:
-        request:
-          headers:
-            ProjectID: "0"
-
-extraObjects: []
-"#;
-        assert_eq!(codes, excpet);
+        let in_file = PathBuf::from("./tests/data/yml/case2_in.yml");
+        let out_file = PathBuf::from("./tests/data/yml/case2_out.yml");
+        let in_yml = read_to_string(&in_file).assert();
+        let out_yml = read_to_string(&out_file).assert();
+        let codes = remove_comment(in_yml.as_str()).assert();
+        println!("{codes:#}");
+        assert_eq!(out_yml, codes.as_str());
     }
+
     #[test]
     fn test_yaml_case3() {
         let in_file = PathBuf::from("./tests/data/yml/case3_in.yml");
@@ -515,17 +520,4 @@ extraObjects: []
         println!("{codes:#}");
         assert_eq!(out_yml, codes.as_str());
     }
-
-    const YAML_DATA: &str = r#"
-vector:
-  customConfigNamespace: ""
-    sinks:
-      vlogs:
-        request:
-          headers:
-            ProjectID: "0"
-
-# -- Add extra specs dynamically to this chart
-extraObjects: []
-"#;
 }

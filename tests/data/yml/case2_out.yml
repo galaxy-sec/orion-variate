@@ -1,0 +1,9 @@
+vector:
+  customConfigNamespace: ""
+    sinks:
+      vlogs:
+        request:
+          headers:
+            ProjectID: "0"
+
+extraObjects: []
