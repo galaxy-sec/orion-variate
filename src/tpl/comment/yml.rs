@@ -364,10 +364,20 @@ kafka_connection_rate_limit: 1000
         request:
           headers:
             ProjectID: "0"
-      
+
 extraObjects: []
 "#;
         assert_eq!(codes, excpet);
+    }
+    #[test]
+    fn test_yaml_case3() {
+        let in_file = PathBuf::from("./tests/data/yml/case3_in.yml");
+        let out_file = PathBuf::from("./tests/data/yml/case3_out.yml");
+        let in_yml = read_to_string(&in_file).assert();
+        let out_yml = read_to_string(&out_file).assert();
+        let codes = remove_comment(in_yml.as_str()).assert();
+        println!("{codes:#}");
+        assert_eq!(out_yml, codes.as_str());
     }
 
     const YAML_DATA: &str = r#"
@@ -378,7 +388,7 @@ vector:
         request:
           headers:
             ProjectID: "0"
-      
+
 # -- Add extra specs dynamically to this chart
 extraObjects: []
 "#;
