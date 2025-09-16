@@ -4,7 +4,7 @@ use winnow::{
     ascii::{line_ending, till_line_ending},
     combinator::{fail, opt},
     error::{StrContext, StrContextValue},
-    token::{literal, take_till, take_while},
+    token::take_while,
 };
 
 pub struct YmlComment {}
@@ -30,16 +30,20 @@ pub fn ignore_comment_line(status: &mut YmlStatus, input: &mut &str) -> ModalRes
     let mut line = String::new();
     loop {
         if input.is_empty() {
+            // Flush any remaining buffered content when reaching EOF
+            if !line.trim().is_empty() {
+                out.push_str(&line);
+            }
             break;
         }
         match status {
             YmlStatus::Code => {
                 let code = take_while(0.., |c| {
-                    c != '"' && c != '|' && c != '\'' && c != '#' && c != '\n'
+                    c != '"' && c != '|' && c != '>' && c != '\'' && c != '#' && c != '\n' && c != '\r'
                 })
                 .parse_next(input)?;
 
-                if opt("\n").parse_next(input)?.is_some() {
+                if opt(line_ending).parse_next(input)?.is_some() {
                     line += code;
                     if !line.trim().is_empty() {
                         out += line.as_str();
@@ -60,27 +64,54 @@ pub fn ignore_comment_line(status: &mut YmlStatus, input: &mut &str) -> ModalRes
                 if input.is_empty() {
                     break;
                 }
-                let rst = opt("|\n").parse_next(input)?;
-                if let Some(tag_code) = rst {
-                    line += tag_code;
-                    *status = YmlStatus::BlockData;
-                    continue;
+                // Block scalar start: | or > with optional chomping/indent modifiers, then line ending
+                // Examples: |, |-, |+, >, >2, >-
+                let mut indicator: Option<char> = None;
+                if opt("|").parse_next(input)?.is_some() {
+                    indicator = Some('|');
+                } else if opt(">").parse_next(input)?.is_some() {
+                    indicator = Some('>');
                 }
-                let rst = opt("|").parse_next(input)?;
-                if let Some(tag_code) = rst {
-                    line += tag_code;
-                    continue;
+                if let Some(ind) = indicator {
+                    // Peek ahead to the end of line without consuming input
+                    let s = *input;
+                    let eol_pos = s.find(['\n', '\r']);
+                    let mods = match eol_pos {
+                        Some(p) => &s[..p],
+                        None => s,
+                    };
+                    let is_valid = mods
+                        .chars()
+                        .all(|ch| ch.is_ascii_whitespace() || ch == '+' || ch == '-' || ch.is_ascii_digit());
+                    if is_valid {
+                        // Consume the modifiers portion
+                        let consume_len = mods.len();
+                        line.push(ind);
+                        line.push_str(mods);
+                        *input = &s[consume_len..];
+                        // Start of block scalar only if followed by a real line ending
+                        if opt(line_ending).parse_next(input)?.is_some() {
+                            line.push('\n');
+                            *status = YmlStatus::BlockData;
+                            continue;
+                        } else {
+                            continue;
+                        }
+                    } else {
+                        // Not a block scalar indicator, treat as plain char
+                        line.push(ind);
+                        continue;
+                    }
                 }
-
-                let rst = opt("\"").parse_next(input)?;
-                if let Some(tag_code) = rst {
-                    line += tag_code;
+                // Double-quoted string
+                if opt("\"").parse_next(input)?.is_some() {
+                    line.push('"');
                     *status = YmlStatus::StringDouble;
                     continue;
                 }
-                let rst = opt("\'").parse_next(input)?;
-                if let Some(tag_code) = rst {
-                    line += tag_code;
+                // Single-quoted string
+                if opt("\'").parse_next(input)?.is_some() {
+                    line.push('\'');
                     *status = YmlStatus::StringSingle;
                     continue;
                 }
@@ -102,17 +133,69 @@ pub fn ignore_comment_line(status: &mut YmlStatus, input: &mut &str) -> ModalRes
             },
 
             YmlStatus::StringDouble => {
-                let data = take_till(0.., |c| c == '"').parse_next(input)?;
-                line += data;
-                let data = literal("\"").parse_next(input)?;
-                line += data;
-                *status = YmlStatus::Code;
+                // Read until an unescaped double quote (handles \" sequences)
+                let s = *input;
+                let mut idx = 0;
+                let bytes = s.as_bytes();
+                let mut escaped = false;
+                while idx < bytes.len() {
+                    let ch = bytes[idx] as char;
+                    if ch == '\n' || ch == '\r' {
+                        // allow EOL inside double quoted in YAML (it is allowed with escaping), flush and continue
+                        line.push(ch);
+                        escaped = false;
+                        idx += 1;
+                        continue;
+                    }
+                    if ch == '"' && !escaped {
+                        // include closing quote and consume
+                        line.push('"');
+                        idx += 1;
+                        *input = &s[idx..];
+                        *status = YmlStatus::Code;
+                        break;
+                    }
+                    if ch == '\\' && !escaped {
+                        escaped = true;
+                        line.push(ch);
+                        idx += 1;
+                        continue;
+                    }
+                    escaped = false;
+                    line.push(ch);
+                    idx += 1;
+                }
+                if idx >= bytes.len() {
+                    // Unterminated string: consume all
+                    *input = &s[idx..];
+                    *status = YmlStatus::Code;
+                }
             }
             YmlStatus::StringSingle => {
-                let data = take_till(0.., |c| c == '\'').parse_next(input)?;
-                line += data;
-                let data = literal("\'").parse_next(input)?;
-                line += data;
+                // Read until a single quote that is not part of a doubled '' escape
+                let s = *input;
+                let mut chars = s.char_indices().peekable();
+                let mut end_idx = None;
+                while let Some((i, ch)) = chars.next() {
+                    if ch == '\'' {
+                        if let Some((_, next_ch)) = chars.peek() {
+                            if *next_ch == '\'' {
+                                // Escaped quote: append one and skip the next
+                                line.push('\'');
+                                let _ = chars.next(); // consume the escape partner
+                                continue;
+                            }
+                        }
+                        // Closing quote
+                        end_idx = Some(i + ch.len_utf8());
+                        line.push('\'');
+                        break;
+                    } else {
+                        line.push(ch);
+                    }
+                }
+                let idx = end_idx.unwrap_or_else(|| s.len());
+                *input = &s[idx..];
                 *status = YmlStatus::Code;
             }
 
@@ -120,12 +203,16 @@ pub fn ignore_comment_line(status: &mut YmlStatus, input: &mut &str) -> ModalRes
                 let _ = till_line_ending
                     .context(wn_desc("comment-line"))
                     .parse_next(input)?;
-                if opt(line_ending)
+                let has_eol = opt(line_ending)
                     .context(wn_desc("comment-line_ending"))
                     .parse_next(input)?
-                    .is_some()
-                {
+                    .is_some();
+                if has_eol {
                     line += "\n";
+                }
+                if !line.trim().is_empty() {
+                    out += &line;
+                    line = String::new();
                 }
                 *status = YmlStatus::Code;
             }
@@ -324,6 +411,55 @@ kafka_connection_rate_limit: 1000
            "#;
         let _codes = remove_comment(data).assert();
         println!("{_codes}",);
+    }
+
+    #[test]
+    fn test_inline_comment_eof_no_newline() {
+        let data = "key: value # comment";
+        let codes = remove_comment(data).assert();
+        assert_eq!(codes, "key: value ");
+    }
+
+    #[test]
+    fn test_crlf_line_endings() {
+        let data = "a: 1\r\nb: 2 # x\r\nc: 3\r\n";
+        let codes = remove_comment(data).assert();
+        assert_eq!(codes, "a: 1\nb: 2 \nc: 3\n");
+    }
+
+    #[test]
+    fn test_block_scalar_chomp_indicator() {
+        let data = r#"key: |-
+  first # not comment
+  second
+end: ok
+"#;
+        let codes = remove_comment(data).assert();
+        // '#' inside block should be preserved
+        assert!(codes.contains("first # not comment"));
+        assert!(codes.contains("second"));
+        assert!(codes.contains("key: |-\n"));
+        assert!(codes.contains("end: ok"));
+    }
+
+    #[test]
+    fn test_block_scalar_folded() {
+        let data = r#"key: >
+  line one # keep
+  line two
+"#;
+        let codes = remove_comment(data).assert();
+        assert!(codes.contains("line one # keep"));
+        assert!(codes.contains("line two"));
+        assert!(codes.contains("key: >\n"));
+    }
+
+    #[test]
+    fn test_double_quoted_escaped_quotes() {
+        let data = r#"msg: "He said \"Hi\" # not comment""#;
+        let codes = remove_comment(data).assert();
+        // '#' is inside quotes; should not be treated as a comment
+        assert!(codes.contains("# not comment"));
     }
     #[test]
     fn test_file_case1() {
