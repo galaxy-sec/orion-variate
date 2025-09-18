@@ -23,7 +23,10 @@ pub enum YmlStatus {
     Code,
     StringDouble,
     StringSingle,
-    BlockData,
+    // Track YAML block scalar context (| or >); `indent` is detected from the
+    // first non-empty content line following the indicator and used to know
+    // when the block ends.
+    BlockData { indent: Option<usize> },
 }
 pub fn ignore_comment_line(status: &mut YmlStatus, input: &mut &str) -> ModalResult<String> {
     let mut out = String::new();
@@ -104,7 +107,7 @@ pub fn ignore_comment_line(status: &mut YmlStatus, input: &mut &str) -> ModalRes
                         // Start of block scalar only if followed by a real line ending
                         if opt(line_ending).parse_next(input)?.is_some() {
                             line.push('\n');
-                            *status = YmlStatus::BlockData;
+                            *status = YmlStatus::BlockData { indent: None };
                             continue;
                         } else {
                             continue;
@@ -133,55 +136,76 @@ pub fn ignore_comment_line(status: &mut YmlStatus, input: &mut &str) -> ModalRes
                 }
                 return fail.context(wn_desc("end-code")).parse_next(input);
             }
-            YmlStatus::BlockData => match till_line_ending.parse_next(input) {
-                Ok(data) => {
-                    if data.trim().is_empty() {
-                        *status = YmlStatus::Code;
-                    } else {
-                        line += data;
-                    }
+            YmlStatus::BlockData { indent } => {
+                // Read one visual line of the block scalar, preserve Unicode and
+                // detect block termination when indentation drops below baseline.
+                let s = *input;
+                if s.is_empty() {
+                    continue;
                 }
-                Err(e) => return Err(e),
-            },
+
+                // Locate end-of-line; support both "\n" and "\r\n". Normalize as "\n".
+                let (line_str, eol_len) = if let Some(nl_pos) = s.find('\n') {
+                    let mut end = nl_pos;
+                    if nl_pos > 0 && s.as_bytes()[nl_pos - 1] == b'\r' {
+                        end -= 1;
+                    }
+                    (&s[..end], (nl_pos + 1) - end)
+                } else {
+                    (s, 0)
+                };
+
+                let current_indent = line_str.chars().take_while(|c| *c == ' ').count();
+                if indent.is_none() && !line_str.trim().is_empty() {
+                    *indent = Some(current_indent);
+                }
+                let baseline = indent.unwrap_or(0);
+
+                // If this non-empty line is less indented than baseline, block ends.
+                if !line_str.trim().is_empty() && current_indent < baseline {
+                    *status = YmlStatus::Code;
+                    // Do not consume; let Code branch handle this line in the next loop.
+                    continue;
+                }
+
+                // Consume this line and append it, keeping a normalized newline if present.
+                let consume_len = line_str.len() + eol_len;
+                line.push_str(line_str);
+                if eol_len > 0 {
+                    line.push('\n');
+                }
+                *input = &s[consume_len..];
+            }
 
             YmlStatus::StringDouble => {
-                // Read until an unescaped double quote (handles \" sequences)
+                // Read until an unescaped double quote, preserving Unicode correctly.
                 let s = *input;
-                let mut idx = 0;
-                let bytes = s.as_bytes();
+                let mut end_idx = None;
                 let mut escaped = false;
-                while idx < bytes.len() {
-                    let ch = bytes[idx] as char;
-                    if ch == '\n' || ch == '\r' {
-                        // allow EOL inside double quoted in YAML (it is allowed with escaping), flush and continue
-                        line.push(ch);
-                        escaped = false;
-                        idx += 1;
-                        continue;
+                for (i, ch) in s.char_indices() {
+                    match ch {
+                        '\\' if !escaped => {
+                            escaped = true;
+                            line.push('\\');
+                        }
+                        '"' if !escaped => {
+                            line.push('"');
+                            end_idx = Some(i + ch.len_utf8());
+                            break;
+                        }
+                        '\n' | '\r' => {
+                            line.push(ch);
+                            escaped = false;
+                        }
+                        _ => {
+                            line.push(ch);
+                            escaped = false;
+                        }
                     }
-                    if ch == '"' && !escaped {
-                        // include closing quote and consume
-                        line.push('"');
-                        idx += 1;
-                        *input = &s[idx..];
-                        *status = YmlStatus::Code;
-                        break;
-                    }
-                    if ch == '\\' && !escaped {
-                        escaped = true;
-                        line.push(ch);
-                        idx += 1;
-                        continue;
-                    }
-                    escaped = false;
-                    line.push(ch);
-                    idx += 1;
                 }
-                if idx >= bytes.len() {
-                    // Unterminated string: consume all
-                    *input = &s[idx..];
-                    *status = YmlStatus::Code;
-                }
+                let idx = end_idx.unwrap_or(s.len());
+                *input = &s[idx..];
+                *status = YmlStatus::Code;
             }
             YmlStatus::StringSingle => {
                 // Read until a single quote that is not part of a doubled '' escape
@@ -190,13 +214,13 @@ pub fn ignore_comment_line(status: &mut YmlStatus, input: &mut &str) -> ModalRes
                 let mut end_idx = None;
                 while let Some((i, ch)) = chars.next() {
                     if ch == '\'' {
-                        if let Some((_, next_ch)) = chars.peek() {
-                            if *next_ch == '\'' {
-                                // Escaped quote: append one and skip the next
-                                line.push('\'');
-                                let _ = chars.next(); // consume the escape partner
-                                continue;
-                            }
+                        if let Some((_, next_ch)) = chars.peek()
+                            && *next_ch == '\''
+                        {
+                            // Escaped quote: append one and skip the next
+                            line.push('\'');
+                            let _ = chars.next(); // consume the escape partner
+                            continue;
                         }
                         // Closing quote
                         end_idx = Some(i + ch.len_utf8());
@@ -206,7 +230,7 @@ pub fn ignore_comment_line(status: &mut YmlStatus, input: &mut &str) -> ModalRes
                         line.push(ch);
                     }
                 }
-                let idx = end_idx.unwrap_or_else(|| s.len());
+                let idx = end_idx.unwrap_or(s.len());
                 *input = &s[idx..];
                 *status = YmlStatus::Code;
             }
