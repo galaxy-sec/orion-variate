@@ -1,0 +1,11 @@
+extract_log_level.lua: |
+  function extract_log_level(tag, timestamp, record)
+      if record["level"] ~= nil then return 1, timestamp, record end
+
+      -- 定义各级别的关键字集合
+      local error_set = { "fatal", "error", "panic", "fail", "exception","失败","错误"}
+      local warn_set  = { "warn", "alert", "caution", "注意","警告"}
+      local info_set  = { "info", "notice", "消息", "信息" }
+      local debug_set = { "debug", "trace", "调试", "追踪"}
+      local msg = record["_msg"]
+      record["level"] = "info"

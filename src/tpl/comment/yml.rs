@@ -39,7 +39,13 @@ pub fn ignore_comment_line(status: &mut YmlStatus, input: &mut &str) -> ModalRes
         match status {
             YmlStatus::Code => {
                 let code = take_while(0.., |c| {
-                    c != '"' && c != '|' && c != '>' && c != '\'' && c != '#' && c != '\n' && c != '\r'
+                    c != '"'
+                        && c != '|'
+                        && c != '>'
+                        && c != '\''
+                        && c != '#'
+                        && c != '\n'
+                        && c != '\r'
                 })
                 .parse_next(input)?;
 
@@ -86,9 +92,9 @@ pub fn ignore_comment_line(status: &mut YmlStatus, input: &mut &str) -> ModalRes
                         Some(p) => &s[..p],
                         None => s,
                     };
-                    let is_valid = mods
-                        .chars()
-                        .all(|ch| ch.is_ascii_whitespace() || ch == '+' || ch == '-' || ch.is_ascii_digit());
+                    let is_valid = mods.chars().all(|ch| {
+                        ch.is_ascii_whitespace() || ch == '+' || ch == '-' || ch.is_ascii_digit()
+                    });
                     if is_valid {
                         // Consume the modifiers portion
                         let consume_len = mods.len();
@@ -499,7 +505,7 @@ end: ok
         let codes = remove_comment(yml.as_str()).assert();
         write_all(out_file, codes.as_str()).assert();
     }
-        #[test]
+    #[test]
     fn test_yaml_case2() {
         let in_file = PathBuf::from("./tests/data/yml/case2_in.yml");
         let out_file = PathBuf::from("./tests/data/yml/case2_out.yml");
@@ -519,5 +525,85 @@ end: ok
         let codes = remove_comment(in_yml.as_str()).assert();
         println!("{codes:#}");
         assert_eq!(out_yml, codes.as_str());
+    }
+
+    #[test]
+    fn test_yaml_case4() {
+        let in_file = PathBuf::from("./tests/data/yml/case4_in.yml");
+        let out_file = PathBuf::from("./tests/data/yml/case4_out.yml");
+        let in_yml = read_to_string(&in_file).assert();
+        let out_yml = read_to_string(&out_file).assert();
+        let codes = remove_comment(in_yml.as_str()).assert();
+        println!("{codes:#}");
+        assert_eq!(out_yml, codes.as_str());
+    }
+
+    #[test]
+    fn debug_chinese_encoding() {
+        println!("=== 调试中文字符编码问题 ===");
+
+        // 读取输入文件
+        let in_file = PathBuf::from("./tests/data/yml/case4_in.yml");
+        let out_file = PathBuf::from("./tests/data/yml/case4_out.yml");
+        let input_content = read_to_string(&in_file).assert();
+        let expected_content = read_to_string(&out_file).assert();
+
+        // 检查文件内容是否相同
+        if input_content == expected_content {
+            println!("✓ 输入文件和期望输出文件内容完全相同");
+        } else {
+            println!("✗ 输入文件和期望输出文件内容不同");
+        }
+
+        // 检查实际处理结果
+        println!("=== 测试YAML处理函数 ===");
+        match remove_comment(&input_content) {
+            Ok(processed) => {
+                println!("处理后的内容:");
+                println!("{}", processed);
+
+                // 检查处理结果与期望输出的差异
+                if processed == expected_content {
+                    println!("✓ 处理结果与期望输出完全匹配");
+                } else {
+                    println!("✗ 处理结果与期望输出不匹配");
+
+                    // 找出差异
+                    let processed_lines: Vec<&str> = processed.lines().collect();
+                    let expected_lines: Vec<&str> = expected_content.lines().collect();
+
+                    for (i, (p_line, e_line)) in processed_lines
+                        .iter()
+                        .zip(expected_lines.iter())
+                        .enumerate()
+                    {
+                        if p_line != e_line {
+                            println!("第{}行差异:", i + 1);
+                            println!("实际:   '{}'", p_line);
+                            println!("期望:   '{}'", e_line);
+
+                            // 检查字符级别的差异
+                            let p_chars: Vec<char> = p_line.chars().collect();
+                            let e_chars: Vec<char> = e_line.chars().collect();
+
+                            for (j, (p_char, e_char)) in
+                                p_chars.iter().zip(e_chars.iter()).enumerate()
+                            {
+                                if p_char != e_char {
+                                    println!(
+                                        "  字符{}差异: 实际='{}' (U+{:04X}), 期望='{}' (U+{:04X})",
+                                        j, p_char, *p_char as u32, e_char, *e_char as u32
+                                    );
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                println!("处理失败: {}", e);
+            }
+        }
     }
 }
