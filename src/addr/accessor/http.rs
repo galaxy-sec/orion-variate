@@ -386,7 +386,7 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn test_http_auth_download_no() -> AddrResult<()> {
         // 1. 配置模拟服务器
-        let mut server = mockito::Server::new();
+        let mut server = mockito::Server::new_async().await;
         let mock = server.mock("GET", "/wpflow.txt")
             .match_header("Authorization", Matcher::Exact("Basic Z2VuZXJpYy0xNzQ3NTM1OTc3NjMyOjViMmM5ZTliN2YxMTFhZjUyZjAzNzVjMWZkOWQzNWNkNGQwZGFiYzM=".to_string()))
             .with_status(200)
@@ -425,7 +425,7 @@ mod tests {
     async fn test_http_auth_download_with_redirect() -> AddrResult<()> {
         test_init();
         // 1. 配置模拟服务器
-        let mut server = mockito::Server::new();
+        let mut server = mockito::Server::new_async().await;
         let mock = server.mock("GET", "/success.txt")
             .match_header("Authorization", Matcher::Exact("Basic Z2VuZXJpYy0xNzQ3NTM1OTc3NjMyOjViMmM5ZTliN2YxMTFhZjUyZjAzNzVjMWZkOWQzNWNkNGQwZGFiYzM=".to_string()))
             .with_status(200)
@@ -488,7 +488,7 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn test_http_upload_post() -> AddrResult<()> {
         // 1. 配置模拟服务器
-        let mut server = mockito::Server::new();
+        let mut server = mockito::Server::new_async().await;
         let mock = server.mock("POST", "/upload")
             .match_header("content-type", Matcher::Regex("multipart/form-data.*".to_string()))
             .match_header("Authorization", Matcher::Exact("Basic Z2VuZXJpYy0xNzQ3NTM1OTc3NjMyOjViMmM5ZTliN2YxMTFhZjUyZjAzNzVjMWZkOWQzNWNkNGQwZGFiYzM=".to_string()))
@@ -522,7 +522,7 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn test_http_upload_put() -> AddrResult<()> {
         // 1. 配置模拟服务器
-        let mut server = mockito::Server::new();
+        let mut server = mockito::Server::new_async().await;
         let mock = server.mock("PUT", "/upload_put")
             .match_header("Authorization", Matcher::Exact("Basic Z2VuZXJpYy0xNzQ3NTM1OTc3NjMyOjViMmM5ZTliN2YxMTFhZjUyZjAzNzVjMWZkOWQzNWNkNGQwZGFiYzM=".to_string()))
             .with_status(200)
