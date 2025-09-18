@@ -65,4 +65,4 @@ futures-core = "0.3.31"
 [dev-dependencies]
 rstest = "0.26.0"
 tempfile = "3.22"
-mockito = "1.2"
+mockito = "1.7"
