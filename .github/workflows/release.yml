@@ -5,25 +5,10 @@ on:
     tags:
       - "v*.*.*"
 
-jobs:
-  create-release:
-    name: Create Release
-    runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-    steps:
-      - uses: actions/checkout@v5
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
+permissions:
+  contents: write
 
+jobs:
   publish-crate:
     name: Publish to crates.io
     runs-on: ubuntu-latest
@@ -31,4 +16,16 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}
+      - name: Verify tag matches Cargo.toml version
+        run: |
+          TAG_NAME="${GITHUB_REF##*/}"
+          TAG_VER="${TAG_NAME#v}"
+          CRATE_VER=$(sed -n 's/^version\s*=\s*\"\(.*\)\"/\1/p' Cargo.toml | head -n1)
+          echo "Tag: ${TAG_VER} | Crate: ${CRATE_VER}"
+          test "${TAG_VER}" = "${CRATE_VER}"
+      - name: Cargo package (dry run)
+        run: cargo package
+      - name: Publish
+        env:
+          CARGO_TERM_COLOR: always
+        run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}
