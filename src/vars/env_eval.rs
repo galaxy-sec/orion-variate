@@ -76,40 +76,7 @@ pub fn expand_env_vars(dict: &EnvDict, input: &str) -> String {
 mod tests {
     use std::env;
 
-    use crate::{
-        tools::get_repo_name,
-        vars::{EnvDict, ValueType, env_eval::expand_env_vars},
-    };
-
-    #[test]
-    fn test_get_last_segment() {
-        // 测试HTTP URL
-        assert_eq!(
-            get_repo_name("https://github.com/user/repo.git"),
-            Some("repo.git".to_string())
-        );
-
-        // 测试HTTPS URL
-        assert_eq!(
-            get_repo_name("https://github.com/user/repo"),
-            Some("repo".to_string())
-        );
-
-        // 测试SSH格式Git地址
-        assert_eq!(
-            get_repo_name("git@github.com:user/repo.git"),
-            Some("repo.git".to_string())
-        );
-
-        // 测试SSH格式不带.git后缀
-        assert_eq!(
-            get_repo_name("git@gitlab.com:group/subgroup/repo"),
-            Some("repo".to_string())
-        );
-
-        // 测试无效URL
-        assert_eq!(get_repo_name("not_a_url"), None);
-    }
+    use crate::vars::{EnvDict, ValueType, env_eval::expand_env_vars};
 
     #[test]
     fn test_basic_expansion() {

@@ -1,12 +1,11 @@
-use std::{collections::HashMap, path::Path};
+use std::collections::HashMap;
 
-use crate::{tpl::TplResult, vars::types::UpperKey};
 use derive_getters::Getters;
 use derive_more::{Deref, From};
 use indexmap::IndexMap;
-use orion_conf::Yamlable;
-use orion_error::ErrorOwe;
 use serde_derive::{Deserialize, Serialize};
+
+use crate::vars::UpperKey;
 
 use super::{
     EnvDict,
@@ -93,24 +92,6 @@ impl ValueDict {
         let upper_key = UpperKey::from(key.as_ref());
         self.dict.get(&upper_key)
     }
-
-    pub fn eval_from_file(dict: &EnvDict, file_path: &Path) -> TplResult<Self> {
-        //let mut cur_dict = dict.clone();
-        let ins = ValueDict::from_yml(file_path).owe_res()?;
-        Ok(ins.env_eval(dict))
-    }
-
-    /*
-    fn eval_import(self, dict: &mut ValueDict) -> Self {
-        let mut map = ValueMap::new();
-        for (k, v) in self.dict {
-            let e_v = v.env_eval(dict);
-            dict.insert(k.clone(), e_v.clone());
-            map.insert(k, e_v);
-        }
-        Self { dict: map }
-    }
-    */
 }
 
 #[cfg(test)]
@@ -125,28 +106,6 @@ mod tests {
         let mut file = NamedTempFile::new().unwrap();
         write!(file, "{content}",).unwrap();
         file
-    }
-    #[test]
-    fn test_eval_from_file_basic() {
-        // 准备测试数据
-        let file = create_temp_file(
-            r#"
-        key1: "value1"
-        key2:  ${key1}
-        key3:  ${key2}
-        "#,
-        );
-
-        // 准备环境字典
-        let env_dict = EnvDict::new();
-
-        // 执行方法
-        let result = ValueDict::eval_from_file(&env_dict, file.path()).unwrap();
-
-        // 验证结果
-        assert_eq!(result.get("key1"), Some(&ValueType::from("value1")));
-        assert_eq!(result.get("key2"), Some(&ValueType::from("value1")));
-        assert_eq!(result.get("key3"), Some(&ValueType::from("value1")));
     }
 
     #[test]
