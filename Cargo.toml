@@ -10,6 +10,8 @@ keywords = ["variate", "utilities"]
 categories = ["config"]
 
 [dependencies]
+orion_conf = { git = "https://github.com/galaxy-sec/orion-conf.git", tag = "v0.1.5" }
+
 orion-error = "~0.5"
 env_logger = "~0.11"
 thiserror = "~2.0"
