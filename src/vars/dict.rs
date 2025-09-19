@@ -98,16 +98,6 @@ impl ValueDict {
 mod tests {
     use super::*;
 
-    use std::io::Write;
-    use tempfile::NamedTempFile;
-
-    // 辅助函数：创建临时测试文件
-    fn create_temp_file(content: &str) -> NamedTempFile {
-        let mut file = NamedTempFile::new().unwrap();
-        write!(file, "{content}",).unwrap();
-        file
-    }
-
     #[test]
     fn test_dict_toml_serialization() {
         let mut dict = ValueDict::new();
