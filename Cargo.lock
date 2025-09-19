@@ -547,7 +547,7 @@ dependencies = [
 
 [[package]]
 name = "orion-variate"
-version = "0.10.0"
+version = "0.10.1"
 dependencies = [
  "contracts",
  "derive-getters",
