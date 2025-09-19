@@ -3,29 +3,36 @@ name: Release
 on:
   push:
     tags:
-      - "v*.*.*"
+      - 'v*.*.*'
 
 permissions:
   contents: write
 
 jobs:
-  publish-crate:
-    name: Publish to crates.io
+  release:
+    name: Publish and Create Release
     runs-on: ubuntu-latest
-    needs: create-release
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - name: Verify tag matches Cargo.toml version
+        shell: bash
         run: |
-          TAG_NAME="${GITHUB_REF##*/}"
-          TAG_VER="${TAG_NAME#v}"
+          TAG="${GITHUB_REF_NAME}"
+          TAG_VER="${TAG#v}"
           CRATE_VER=$(sed -n 's/^version\s*=\s*\"\(.*\)\"/\1/p' Cargo.toml | head -n1)
           echo "Tag: ${TAG_VER} | Crate: ${CRATE_VER}"
           test "${TAG_VER}" = "${CRATE_VER}"
       - name: Cargo package (dry run)
         run: cargo package
-      - name: Publish
+      - name: Publish to crates.io
         env:
           CARGO_TERM_COLOR: always
         run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
