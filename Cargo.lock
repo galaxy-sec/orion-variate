@@ -844,10 +844,10 @@ dependencies = [
  "serde_derive",
  "serde_ini",
  "serde_json",
- "serde_toml",
  "serde_yaml",
  "tempfile",
  "thiserror",
+ "toml",
  "tracing",
  "walkdir",
  "winnow",
@@ -1244,12 +1244,6 @@ checksum = "5417783452c2be558477e104686f7de5dae53dba813c28435e0e70f82d9b04ee"
 dependencies = [
  "serde_core",
 ]
-
-[[package]]
-name = "serde_toml"
-version = "0.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e68184169792863bfb6d8b5de8e15456ebf4302f28236f0ff1136591eb66541"
 
 [[package]]
 name = "serde_urlencoded"
