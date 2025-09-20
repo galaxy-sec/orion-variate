@@ -16,17 +16,17 @@ use serde_derive::{Deserialize, Serialize};
 use winnow::Parser;
 
 pub type EnvDict = ValueDict;
-pub trait EnvEvalable<T> {
+pub trait EnvEvaluable<T> {
     fn env_eval(self, dict: &EnvDict) -> T;
 }
 
-impl EnvEvalable<String> for String {
+impl EnvEvaluable<String> for String {
     fn env_eval(self, dict: &EnvDict) -> String {
         expand_env_vars(dict, self.as_str())
     }
 }
 
-impl EnvEvalable<Option<String>> for Option<String> {
+impl EnvEvaluable<Option<String>> for Option<String> {
     fn env_eval(self, dict: &EnvDict) -> Option<String> {
         self.map(|x| expand_env_vars(dict, x.as_str()))
     }
@@ -93,7 +93,7 @@ impl Display for ValueType {
     }
 }
 
-impl EnvEvalable<ValueType> for ValueType {
+impl EnvEvaluable<ValueType> for ValueType {
     fn env_eval(self, dict: &EnvDict) -> ValueType {
         match self {
             ValueType::String(v) => ValueType::String(v.env_eval(dict)),
@@ -126,7 +126,7 @@ impl ValueType {
         }
     }
 
-    pub fn type_name(&self) -> &'static str {
+    pub fn variant_name(&self) -> &'static str {
         match self {
             ValueType::String(_) => "String",
             ValueType::Bool(_) => "Bool",
@@ -137,7 +137,7 @@ impl ValueType {
             ValueType::List(_) => "List",
         }
     }
-    pub fn update_by_str(&mut self, s: &str) -> VarsResult<()> {
+    pub fn update_from_str(&mut self, s: &str) -> VarsResult<()> {
         let mut input = s;
         match self {
             ValueType::String(x) => *x = s.to_string(),
@@ -159,6 +159,16 @@ impl ValueType {
             }
         }
         Ok(())
+    }
+
+    #[deprecated(note = "renamed to variant_name()")]
+    pub fn type_name(&self) -> &'static str {
+        self.variant_name()
+    }
+
+    #[deprecated(note = "renamed to update_from_str()")]
+    pub fn update_by_str(&mut self, s: &str) -> VarsResult<()> {
+        self.update_from_str(s)
     }
 }
 #[cfg(test)]
@@ -284,84 +294,84 @@ mod tests {
     #[test]
     fn test_value_type_name() {
         let s = ValueType::String("hello".to_string());
-        assert_eq!(s.type_name(), "String");
+        assert_eq!(s.variant_name(), "String");
 
         let b = ValueType::Bool(true);
-        assert_eq!(b.type_name(), "Bool");
+        assert_eq!(b.variant_name(), "Bool");
 
         let n = ValueType::Number(42);
-        assert_eq!(n.type_name(), "Number");
+        assert_eq!(n.variant_name(), "Number");
 
         let f = ValueType::Float(4.14);
-        assert_eq!(f.type_name(), "Float");
+        assert_eq!(f.variant_name(), "Float");
 
         let ip = ValueType::Ip("127.0.0.1".parse().unwrap());
-        assert_eq!(ip.type_name(), "Ip");
+        assert_eq!(ip.variant_name(), "Ip");
 
         let obj = ValueType::Obj(ValueObj::new());
-        assert_eq!(obj.type_name(), "Obj");
+        assert_eq!(obj.variant_name(), "Obj");
 
         let list = ValueType::List(ValueVec::new());
-        assert_eq!(list.type_name(), "List");
+        assert_eq!(list.variant_name(), "List");
     }
 
     #[test]
-    fn test_update_by_str() {
+    fn test_update_from_str() {
         // 测试 String 类型更新
         let mut string_val = ValueType::String("old".to_string());
-        string_val.update_by_str("new").unwrap();
+        string_val.update_from_str("new").unwrap();
         assert_eq!(string_val, ValueType::String("new".to_string()));
 
         // 测试 Bool 类型更新
         let mut bool_val = ValueType::Bool(false);
-        bool_val.update_by_str("true").unwrap();
+        bool_val.update_from_str("true").unwrap();
         assert_eq!(bool_val, ValueType::Bool(true));
 
         // 测试无效 Bool 值
         let mut bool_val = ValueType::Bool(false);
-        assert!(bool_val.update_by_str("invalid").is_err());
+        assert!(bool_val.update_from_str("invalid").is_err());
 
         // 测试 Number 类型更新
         let mut number_val = ValueType::Number(10);
-        number_val.update_by_str("42").unwrap();
+        number_val.update_from_str("42").unwrap();
         assert_eq!(number_val, ValueType::Number(42));
 
         // 测试无效 Number 值
         let mut number_val = ValueType::Number(10);
-        assert!(number_val.update_by_str("invalid").is_err());
+        assert!(number_val.update_from_str("invalid").is_err());
 
         // 测试 Float 类型更新
         let mut float_val = ValueType::Float(1.5);
-        float_val.update_by_str("3.24").unwrap();
+        float_val.update_from_str("3.24").unwrap();
         assert_eq!(float_val, ValueType::Float(3.24));
 
         // 测试无效 Float 值
         let mut float_val = ValueType::Float(1.5);
-        assert!(float_val.update_by_str("invalid").is_err());
+        assert!(float_val.update_from_str("invalid").is_err());
 
         // 测试 IP 类型更新
         let mut ip_val = ValueType::Ip("127.0.0.1".parse().unwrap());
-        ip_val.update_by_str("192.168.1.1").unwrap();
+        ip_val.update_from_str("192.168.1.1").unwrap();
         assert_eq!(ip_val, ValueType::Ip("192.168.1.1".parse().unwrap()));
 
         // 测试无效 IP 值
         let mut ip_val = ValueType::Ip("127.0.0.1".parse().unwrap());
-        assert!(ip_val.update_by_str("invalid").is_err());
+        assert!(ip_val.update_from_str("invalid").is_err());
 
         // 测试 Obj 类型更新
         let mut obj_val = ValueType::Obj(ValueObj::new());
-        obj_val.update_by_str("{key: \"value\"}").unwrap();
+        obj_val.update_from_str("{key: \"value\"}").unwrap();
         let mut expected_obj = ValueObj::new();
         expected_obj.insert("key".to_string(), ValueType::String("value".to_string()));
         assert_eq!(obj_val, ValueType::Obj(expected_obj));
 
         // 测试无效 Obj 值
         let mut obj_val = ValueType::Obj(ValueObj::new());
-        assert!(obj_val.update_by_str("invalid").is_err());
+        assert!(obj_val.update_from_str("invalid").is_err());
 
         // 测试 List 类型更新
         let mut list_val = ValueType::List(ValueVec::new());
-        list_val.update_by_str("[\"item1\", \"item2\"]").unwrap();
+        list_val.update_from_str("[\"item1\", \"item2\"]").unwrap();
         let expected_list = ValueVec::from([
             ValueType::String("item1".to_string()),
             ValueType::String("item2".to_string()),
@@ -370,6 +380,6 @@ mod tests {
 
         // 测试无效 List 值
         let mut list_val = ValueType::List(ValueVec::new());
-        assert!(list_val.update_by_str("invalid").is_err());
+        assert!(list_val.update_from_str("invalid").is_err());
     }
 }

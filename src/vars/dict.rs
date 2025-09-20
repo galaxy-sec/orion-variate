@@ -9,12 +9,12 @@ use crate::vars::UpperKey;
 
 use super::{
     EnvDict,
-    types::{EnvEvalable, ValueType},
+    types::{EnvEvaluable, ValueType},
 };
 
 pub type ValueMap = IndexMap<UpperKey, ValueType>;
 
-impl EnvEvalable<ValueMap> for ValueMap {
+impl EnvEvaluable<ValueMap> for ValueMap {
     fn env_eval(self, dict: &EnvDict) -> ValueMap {
         let mut cur_dict = dict.clone();
         let mut vmap = ValueMap::new();
@@ -29,7 +29,7 @@ impl EnvEvalable<ValueMap> for ValueMap {
     }
 }
 
-impl EnvEvalable<ValueDict> for ValueDict {
+impl EnvEvaluable<ValueDict> for ValueDict {
     fn env_eval(mut self, dict: &EnvDict) -> ValueDict {
         self.dict = self.dict.env_eval(dict);
         self
@@ -84,13 +84,18 @@ impl ValueDict {
     /// let mut dict = ValueDict::new();
     /// dict.insert("Hello", ValueType::from("world"));
     ///
-    /// assert_eq!(dict.ucase_get("hello"), Some(&ValueType::from("world")));
-    /// assert_eq!(dict.ucase_get("HELLO"), Some(&ValueType::from("world")));
-    /// assert_eq!(dict.ucase_get("nonexistent"), None);
+    /// assert_eq!(dict.get_case_insensitive("hello"), Some(&ValueType::from("world")));
+    /// assert_eq!(dict.get_case_insensitive("HELLO"), Some(&ValueType::from("world")));
+    /// assert_eq!(dict.get_case_insensitive("nonexistent"), None);
     /// ```
-    pub fn ucase_get<S: AsRef<str>>(&self, key: S) -> Option<&ValueType> {
+    pub fn get_case_insensitive<S: AsRef<str>>(&self, key: S) -> Option<&ValueType> {
         let upper_key = UpperKey::from(key.as_ref());
         self.dict.get(&upper_key)
+    }
+
+    #[deprecated(note = "renamed to get_case_insensitive()")]
+    pub fn ucase_get<S: AsRef<str>>(&self, key: S) -> Option<&ValueType> {
+        self.get_case_insensitive(key)
     }
 }
 
@@ -218,23 +223,50 @@ mod tests {
         dict.insert("CamelCase", ValueType::from("value"));
 
         // 测试大小写不敏感查找
-        assert_eq!(dict.ucase_get("hello"), Some(&ValueType::from("world")));
-        assert_eq!(dict.ucase_get("HELLO"), Some(&ValueType::from("world")));
-        assert_eq!(dict.ucase_get("Hello"), Some(&ValueType::from("world")));
+        assert_eq!(
+            dict.get_case_insensitive("hello"),
+            Some(&ValueType::from("world"))
+        );
+        assert_eq!(
+            dict.get_case_insensitive("HELLO"),
+            Some(&ValueType::from("world"))
+        );
+        assert_eq!(
+            dict.get_case_insensitive("Hello"),
+            Some(&ValueType::from("world"))
+        );
 
         // 测试不同键的查找
-        assert_eq!(dict.ucase_get("world"), Some(&ValueType::from("hello")));
-        assert_eq!(dict.ucase_get("World"), Some(&ValueType::from("hello")));
-        assert_eq!(dict.ucase_get("WORLD"), Some(&ValueType::from("hello")));
+        assert_eq!(
+            dict.get_case_insensitive("world"),
+            Some(&ValueType::from("hello"))
+        );
+        assert_eq!(
+            dict.get_case_insensitive("World"),
+            Some(&ValueType::from("hello"))
+        );
+        assert_eq!(
+            dict.get_case_insensitive("WORLD"),
+            Some(&ValueType::from("hello"))
+        );
 
         // 测试驼峰命名查找
-        assert_eq!(dict.ucase_get("camelcase"), Some(&ValueType::from("value")));
-        assert_eq!(dict.ucase_get("CAMELCASE"), Some(&ValueType::from("value")));
-        assert_eq!(dict.ucase_get("CamelCase"), Some(&ValueType::from("value")));
+        assert_eq!(
+            dict.get_case_insensitive("camelcase"),
+            Some(&ValueType::from("value"))
+        );
+        assert_eq!(
+            dict.get_case_insensitive("CAMELCASE"),
+            Some(&ValueType::from("value"))
+        );
+        assert_eq!(
+            dict.get_case_insensitive("CamelCase"),
+            Some(&ValueType::from("value"))
+        );
 
         // 测试不存在的键
-        assert_eq!(dict.ucase_get("nonexistent"), None);
-        assert_eq!(dict.ucase_get(""), None);
+        assert_eq!(dict.get_case_insensitive("nonexistent"), None);
+        assert_eq!(dict.get_case_insensitive(""), None);
     }
 
     #[test]
@@ -246,29 +278,29 @@ mod tests {
 
         // 测试包含特殊字符的键
         assert_eq!(
-            dict.ucase_get("key-with-dashes"),
+            dict.get_case_insensitive("key-with-dashes"),
             Some(&ValueType::from("dashed"))
         );
         assert_eq!(
-            dict.ucase_get("KEY-WITH-DASHES"),
+            dict.get_case_insensitive("KEY-WITH-DASHES"),
             Some(&ValueType::from("dashed"))
         );
 
         assert_eq!(
-            dict.ucase_get("key_with_underscores"),
+            dict.get_case_insensitive("key_with_underscores"),
             Some(&ValueType::from("underscored"))
         );
         assert_eq!(
-            dict.ucase_get("KEY_WITH_UNDERSCORES"),
+            dict.get_case_insensitive("KEY_WITH_UNDERSCORES"),
             Some(&ValueType::from("underscored"))
         );
 
         assert_eq!(
-            dict.ucase_get("key.with.dots"),
+            dict.get_case_insensitive("key.with.dots"),
             Some(&ValueType::from("dotted"))
         );
         assert_eq!(
-            dict.ucase_get("KEY.WITH.DOTS"),
+            dict.get_case_insensitive("KEY.WITH.DOTS"),
             Some(&ValueType::from("dotted"))
         );
     }
@@ -278,22 +310,37 @@ mod tests {
         let mut dict = ValueDict::new();
 
         // 测试空字典
-        assert_eq!(dict.ucase_get("any"), None);
+        assert_eq!(dict.get_case_insensitive("any"), None);
 
         // 插入空字符串键
         dict.insert("", ValueType::from("empty"));
-        assert_eq!(dict.ucase_get(""), Some(&ValueType::from("empty")));
-        assert_eq!(dict.ucase_get("  "), None);
+        assert_eq!(
+            dict.get_case_insensitive(""),
+            Some(&ValueType::from("empty"))
+        );
+        assert_eq!(dict.get_case_insensitive("  "), None);
 
         // 测试 Unicode 字符
         dict.insert("café", ValueType::from("coffee"));
-        assert_eq!(dict.ucase_get("CAFÉ"), Some(&ValueType::from("coffee")));
-        assert_eq!(dict.ucase_get("café"), Some(&ValueType::from("coffee")));
+        assert_eq!(
+            dict.get_case_insensitive("CAFÉ"),
+            Some(&ValueType::from("coffee"))
+        );
+        assert_eq!(
+            dict.get_case_insensitive("café"),
+            Some(&ValueType::from("coffee"))
+        );
 
         // 测试数字键
         dict.insert("123", ValueType::from("number"));
-        assert_eq!(dict.ucase_get("123"), Some(&ValueType::from("number")));
-        assert_eq!(dict.ucase_get("123"), Some(&ValueType::from("number")));
+        assert_eq!(
+            dict.get_case_insensitive("123"),
+            Some(&ValueType::from("number"))
+        );
+        assert_eq!(
+            dict.get_case_insensitive("123"),
+            Some(&ValueType::from("number"))
+        );
     }
 
     #[test]
@@ -352,19 +399,19 @@ SPECIAL_CHARS: "Contains special characters:\n- Tabs:\t\n- Quotes: \"hello\"\n- 
 
         // 验证反序列化结果
         assert_eq!(
-            deserialized_dict.ucase_get("BLOCK_TEXT"),
+            deserialized_dict.get_case_insensitive("BLOCK_TEXT"),
             Some(&ValueType::from(
                 "This is a multi-line\ntext block that preserves\nline breaks and formatting\n"
             ))
         );
         assert_eq!(
-            deserialized_dict.ucase_get("INDENTED_BLOCK"),
+            deserialized_dict.get_case_insensitive("INDENTED_BLOCK"),
             Some(&ValueType::from(
                 "This block has indentation\nthat should be preserved\nacross multiple lines\n"
             ))
         );
         assert_eq!(
-            deserialized_dict.ucase_get("SPECIAL_CHARS"),
+            deserialized_dict.get_case_insensitive("SPECIAL_CHARS"),
             Some(&ValueType::from(
                 "Contains special characters:\n- Tabs:\t\n- Quotes: \"hello\"\n- Backslashes: \\n\\r\\t"
             ))
@@ -382,19 +429,19 @@ SPECIAL_CHARS: "Contains special characters:\n- Tabs:\t\n- Quotes: \"hello\"\n- 
 
         // 验证块数据在往返过程中格式保持
         assert_eq!(
-            roundtrip_dict.ucase_get("BLOCK_TEXT"),
+            roundtrip_dict.get_case_insensitive("BLOCK_TEXT"),
             Some(&ValueType::from(
                 "This is a multi-line\ntext block that preserves\nline breaks and formatting\n"
             ))
         );
         assert_eq!(
-            roundtrip_dict.ucase_get("INDENTED_BLOCK"),
+            roundtrip_dict.get_case_insensitive("INDENTED_BLOCK"),
             Some(&ValueType::from(
                 "This block has indentation\nthat should be preserved\nacross multiple lines\n"
             ))
         );
         assert_eq!(
-            roundtrip_dict.ucase_get("SPECIAL_CHARS"),
+            roundtrip_dict.get_case_insensitive("SPECIAL_CHARS"),
             Some(&ValueType::from(
                 "Contains special characters:\n- Tabs:\t\n- Quotes: \"hello\"\n- Backslashes: \\n\\r\\t"
             ))

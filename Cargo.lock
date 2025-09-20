@@ -573,9 +573,9 @@ dependencies = [
 
 [[package]]
 name = "orion_conf"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76a96b94b7d570b6c285b7df9fc37f623dae780a0ea10ddfd3c208ad29e04270"
+checksum = "223eb4af20821d6a88022b5da48013c990c0447ff82e2b8af2ed10fb0de5bc08"
 dependencies = [
  "derive-getters",
  "derive_more",

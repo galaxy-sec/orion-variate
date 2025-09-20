@@ -17,7 +17,7 @@ pub enum Mutability {
 impl Mutability {
     /// 检查是否为默认值，用于序列化优化
     pub fn is_default(&self) -> bool {
-        matches!(self, Mutability::System)
+        matches!(self, Mutability::Module)
     }
 
     /// 创建不可变作用域
@@ -31,8 +31,13 @@ impl Mutability {
     }
 
     /// 创建模块级可变作用域
-    pub fn model() -> Self {
+    pub fn module() -> Self {
         Mutability::Module
+    }
+
+    #[deprecated(note = "renamed to module() for clarity")]
+    pub fn model() -> Self {
+        Self::Module
     }
 
     /// 为向后兼容，从旧格式的 Option<bool> 转换
@@ -60,8 +65,12 @@ pub struct VarDefinition {
     name: String,
     value: ValueType,
     #[getset(set_with = "pub")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    desp: Option<String>,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        rename = "desc",
+        alias = "desp"
+    )]
+    desc: Option<String>,
     #[getset(get = "pub", set_with = "pub", set = "pub")]
     #[serde(default, skip)]
     mutability: Mutability,
@@ -86,11 +95,19 @@ impl VarDefinition {
         self
     }
 }
+
+impl VarDefinition {
+    /// 兼容旧 API：保留 `desp()` 访问器
+    #[deprecated(note = "renamed to desc()")]
+    pub fn desp(&self) -> &Option<String> {
+        self.desc()
+    }
+}
 impl From<(&str, &str)> for VarDefinition {
     fn from(value: (&str, &str)) -> Self {
         VarDefinition {
             name: value.0.to_string(),
-            desp: None,
+            desc: None,
             value: ValueType::from(value.1),
             mutability: Mutability::default(),
         }
@@ -100,7 +117,7 @@ impl From<(&str, bool)> for VarDefinition {
     fn from(value: (&str, bool)) -> Self {
         VarDefinition {
             name: value.0.to_string(),
-            desp: None,
+            desc: None,
             value: ValueType::from(value.1),
             mutability: Mutability::default(),
         }
@@ -110,7 +127,7 @@ impl From<(&str, u64)> for VarDefinition {
     fn from(value: (&str, u64)) -> Self {
         VarDefinition {
             name: value.0.to_string(),
-            desp: None,
+            desc: None,
             value: ValueType::from(value.1),
             mutability: Mutability::default(),
         }
@@ -120,7 +137,7 @@ impl From<(&str, f64)> for VarDefinition {
     fn from(value: (&str, f64)) -> Self {
         VarDefinition {
             name: value.0.to_string(),
-            desp: None,
+            desc: None,
             value: ValueType::from(value.1),
             mutability: Mutability::default(),
         }
@@ -131,7 +148,7 @@ impl From<(&str, ValueType)> for VarDefinition {
     fn from(value: (&str, ValueType)) -> Self {
         VarDefinition {
             name: value.0.to_string(),
-            desp: None,
+            desc: None,
             value: value.1,
             mutability: Mutability::default(),
         }
@@ -146,7 +163,7 @@ mod tests {
     fn test_change_scope_factory_methods() {
         assert_eq!(Mutability::immutable(), Mutability::Immutable);
         assert_eq!(Mutability::system(), Mutability::System);
-        assert_eq!(Mutability::model(), Mutability::Module);
+        assert_eq!(Mutability::module(), Mutability::Module);
     }
 
     #[test]
@@ -173,7 +190,7 @@ mod tests {
     fn test_var_definition_is_mutable() {
         let immutable_var = VarDefinition {
             name: "test".to_string(),
-            desp: None,
+            desc: None,
             value: ValueType::from("value"),
             mutability: Mutability::Immutable,
         };
@@ -181,7 +198,7 @@ mod tests {
 
         let public_var = VarDefinition {
             name: "test".to_string(),
-            desp: None,
+            desc: None,
             value: ValueType::from("value"),
             mutability: Mutability::System,
         };
@@ -189,7 +206,7 @@ mod tests {
 
         let model_var = VarDefinition {
             name: "test".to_string(),
-            desp: None,
+            desc: None,
             value: ValueType::from("value"),
             mutability: Mutability::Module,
         };
@@ -223,7 +240,7 @@ mod tests {
     fn test_var_definition_serialization() {
         let var = VarDefinition {
             name: "test".to_string(),
-            desp: None,
+            desc: None,
             value: ValueType::from("value"),
             mutability: Mutability::System,
         };
@@ -235,7 +252,7 @@ mod tests {
         // Non-Default scope 应该被序列化
         let var_immutable = VarDefinition {
             name: "test".to_string(),
-            desp: None,
+            desc: None,
             value: ValueType::from("value"),
             mutability: Mutability::Immutable,
         };

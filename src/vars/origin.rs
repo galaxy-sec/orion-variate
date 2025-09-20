@@ -6,13 +6,13 @@ use serde_derive::{Deserialize, Serialize};
 use crate::vars::types::UpperKey;
 
 use super::{
-    EnvDict, EnvEvalable, ValueDict, VarCollection, definition::Mutability, dict::ValueMap,
+    EnvDict, EnvEvaluable, ValueDict, VarCollection, definition::Mutability, dict::ValueMap,
     types::ValueType,
 };
 
 pub type OriginMap = IndexMap<UpperKey, OriginValue>;
 
-impl EnvEvalable<OriginMap> for OriginMap {
+impl EnvEvaluable<OriginMap> for OriginMap {
     fn env_eval(self, dict: &EnvDict) -> OriginMap {
         let mut cur_dict = dict.clone();
         let mut vmap = OriginMap::new();
@@ -38,7 +38,7 @@ pub struct OriginValue {
     mutability: Mutability,
 }
 
-impl EnvEvalable<OriginValue> for OriginValue {
+impl EnvEvaluable<OriginValue> for OriginValue {
     fn env_eval(self, dict: &EnvDict) -> OriginValue {
         Self {
             origin: self.origin,
@@ -52,7 +52,7 @@ impl EnvEvalable<OriginValue> for OriginValue {
 pub struct OriginDict {
     dict: OriginMap,
 }
-impl EnvEvalable<OriginDict> for OriginDict {
+impl EnvEvaluable<OriginDict> for OriginDict {
     fn env_eval(self, dict: &EnvDict) -> OriginDict {
         Self {
             dict: self.dict.env_eval(dict),
@@ -137,17 +137,17 @@ impl OriginDict {
     pub fn insert<S: Into<UpperKey>>(&mut self, k: S, v: ValueType) -> Option<OriginValue> {
         self.dict.insert(k.into(), OriginValue::from(v))
     }
-    pub fn set_source<S: Into<String> + Clone>(&mut self, lable: S) {
+    pub fn set_source<S: Into<String> + Clone>(&mut self, label: S) {
         for x in self.dict.values_mut() {
             if x.origin().is_none() {
-                x.origin = Some(lable.clone().into());
+                x.origin = Some(label.clone().into());
             }
         }
     }
-    pub fn with_origin<S: Into<String> + Clone>(mut self, lable: S) -> Self {
+    pub fn with_origin<S: Into<String> + Clone>(mut self, label: S) -> Self {
         for x in self.dict.values_mut() {
             if x.origin().is_none() {
-                x.origin = Some(lable.clone().into());
+                x.origin = Some(label.clone().into());
             }
         }
         self
@@ -181,9 +181,13 @@ impl OriginDict {
         }
         map
     }
-    pub fn ucase_get<S: AsRef<str>>(&self, key: S) -> Option<&OriginValue> {
+    pub fn get_case_insensitive<S: AsRef<str>>(&self, key: S) -> Option<&OriginValue> {
         let upper_key = UpperKey::from(key.as_ref());
         self.dict.get(&upper_key)
+    }
+    #[deprecated(note = "renamed to get_case_insensitive()")]
+    pub fn ucase_get<S: AsRef<str>>(&self, key: S) -> Option<&OriginValue> {
+        self.get_case_insensitive(key)
     }
 }
 

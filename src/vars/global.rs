@@ -63,11 +63,16 @@ pub fn find_project_define_base(base: PathBuf) -> Option<PathBuf> {
     None
 }
 
-pub struct WorkDir {
+/// RAII 守卫：进入目标目录，在 Drop 时自动恢复
+pub struct CwdGuard {
     original_dir: PathBuf,
 }
 
-impl WorkDir {
+#[allow(dead_code)]
+#[deprecated(note = "renamed to CwdGuard")]
+pub type WorkDir = CwdGuard;
+
+impl CwdGuard {
     #[allow(dead_code)]
     pub fn change<S: Into<PathBuf>>(target_dir: S) -> std::io::Result<Self> {
         let original_dir = env::current_dir()?;
@@ -78,7 +83,7 @@ impl WorkDir {
     }
 }
 
-impl Drop for WorkDir {
+impl Drop for CwdGuard {
     fn drop(&mut self) {
         info!("set current dir:{}", self.original_dir.display());
         if let Err(e) = env::set_current_dir(&self.original_dir) {
@@ -92,7 +97,7 @@ mod tests {
     use std::env;
     use tempfile::TempDir;
 
-    use crate::vars::global::{WorkDir, find_project_define, get_os_info, setup_start_env_vars};
+    use crate::vars::global::{CwdGuard, find_project_define, get_os_info, setup_start_env_vars};
 
     #[test]
     fn test_get_os_info() {
@@ -186,12 +191,12 @@ mod tests {
     }
 
     #[test]
-    fn test_work_dir_with_relative_path() {
+    fn test_cwd_guard_with_relative_path() {
         let original_dir = env::current_dir().expect("Failed to get current dir");
 
         {
             // 使用相对路径创建WorkDir
-            let _work_dir = WorkDir::change(".").expect("Failed to change directory");
+            let _work_dir = CwdGuard::change(".").expect("Failed to change directory");
 
             // 验证工作目录仍然是当前目录
             assert_paths_eq(&env::current_dir().unwrap(), &original_dir);
@@ -202,13 +207,13 @@ mod tests {
     }
 
     #[test]
-    fn test_work_dir_creation_and_restoration() {
+    fn test_cwd_guard_creation_and_restoration() {
         let original_dir = env::current_dir().expect("Failed to get current dir");
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
 
         {
             // 创建WorkDir实例，改变工作目录
-            let _work_dir = WorkDir::change(temp_dir.path()).expect("Failed to change directory");
+            let _work_dir = CwdGuard::change(temp_dir.path()).expect("Failed to change directory");
 
             // 验证工作目录已改变
             assert_paths_eq(&env::current_dir().unwrap(), temp_dir.path());
@@ -232,10 +237,16 @@ mod tests {
         std::fs::write(&project_file, "").expect("Failed to create project.toml");
 
         // 在深层目录中查找
-        let _wd = WorkDir::change(&deep_dir).expect("Failed to change directory");
+        let _wd = CwdGuard::change(&deep_dir).expect("Failed to change directory");
 
         let result = find_project_define();
         assert!(result.is_some());
         assert_paths_eq(&result.unwrap(), temp_dir.path());
+        // 兼容别名：确保 WorkDir 仍可用（不产生编译错误，但避免在主流程中使用）
+        #[allow(deprecated)]
+        {
+            let _alias = crate::vars::global::WorkDir::change(temp_dir.path())
+                .expect("Failed to change directory via alias");
+        }
     }
 }

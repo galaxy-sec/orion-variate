@@ -42,8 +42,8 @@ impl VarToValue<ValueDict> for Vec<VarDefinition> {
 impl VarCollection {
     pub fn define(vars: Vec<VarDefinition>) -> Self {
         let mut immutable_vars = Vec::new();
-        let mut public_vars = Vec::new();
-        let mut modul_vars = Vec::new();
+        let mut system_vars = Vec::new();
+        let mut module_vars = Vec::new();
 
         for v in vars {
             match v.mutability() {
@@ -51,15 +51,15 @@ impl VarCollection {
                     immutable_vars.push(v);
                 }
                 Mutability::System => {
-                    public_vars.push(v);
+                    system_vars.push(v);
                 }
-                Mutability::Module => modul_vars.push(v),
+                Mutability::Module => module_vars.push(v),
             }
         }
         Self {
             immutable_vars,
-            system_vars: public_vars,
-            module_vars: modul_vars,
+            system_vars,
+            module_vars,
         }
     }
     pub fn mark_vars_scope(&mut self) {
@@ -87,23 +87,23 @@ impl VarCollection {
         }
         dict
     }
-    // 基于VarType的name进行合并，相同的name会被覆盖
+    // 基于 VarDefinition 的 name 合并；当 `overwrite=true` 时后者覆盖前者
     pub fn merge(self, other: VarCollection) -> Self {
         let immutable_vars = merge_vec(self.immutable_vars, other.immutable_vars, false);
-        let public_vars = merge_vec(self.system_vars, other.system_vars, true);
-        let modul_vars = merge_vec(self.module_vars, other.module_vars, true);
+        let system_vars = merge_vec(self.system_vars, other.system_vars, true);
+        let module_vars = merge_vec(self.module_vars, other.module_vars, true);
         Self {
             immutable_vars,
-            system_vars: public_vars,
-            module_vars: modul_vars,
+            system_vars,
+            module_vars,
         }
     }
 
     pub fn merge_system(self, other: VarCollection) -> Self {
-        let public_vars = merge_vec(self.system_vars, other.system_vars, true);
+        let system_vars = merge_vec(self.system_vars, other.system_vars, true);
         Self {
             immutable_vars: Vec::new(),
-            system_vars: public_vars,
+            system_vars,
             module_vars: Vec::new(),
         }
     }
@@ -213,9 +213,9 @@ mod tests {
         assert_eq!(merged.immutable_vars().len(), 1); // var2
         assert_eq!(merged.module_vars().len(), 2); // var3, unique_to_1
 
-        // 验证重复变量被正确处理
+        // 验证重复变量被正确处理：后者覆盖前者
         let dict = merged.value_dict();
-        assert_eq!(dict.get("VAR1"), Some(&ValueType::from("value1_from_2"))); // 第一个集合的值优先
+        assert_eq!(dict.get("VAR1"), Some(&ValueType::from("value1_from_2"))); // 后者覆盖前者
         assert_eq!(dict.get("VAR2"), Some(&ValueType::from("value2_from_1")));
         assert_eq!(dict.get("VAR3"), Some(&ValueType::from("value3_from_2")));
         assert_eq!(dict.get("UNIQUE_TO_1"), Some(&ValueType::from("unique")));

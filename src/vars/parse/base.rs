@@ -63,8 +63,8 @@ pub fn take_bool(data: &mut &str) -> Result<bool> {
     .parse_next(data)
 }
 
-//take raw sting by ^""^
-//eg:  ^"hello"^ , ^"hell"0"^
+// Parse raw string in Rust-style syntax: r#"..."#
+// Examples: r#"hello"# , r#"hell\"0"#
 pub fn gal_raw_str(data: &mut &str) -> Result<String> {
     delimited(
         "r#\"",

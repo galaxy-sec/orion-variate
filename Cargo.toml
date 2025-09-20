@@ -12,7 +12,8 @@ categories = ["config"]
 [dependencies]
 
 orion-error = "~0.5"
-orion_conf = { version = "~0.2", features = ["yaml"]}
+orion_conf = { version = "~0.3", features = ["yaml"]}
+#orion_conf = { path = "../orion-conf", features = ["yaml"]}
 thiserror = "~2.0"
 log = "~0.4"
 serde = "~1.0"
