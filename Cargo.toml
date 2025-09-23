@@ -33,6 +33,6 @@ getset = "0.1.6"
 #console = "~0.15"
 [dev-dependencies]
 rstest = "0.26.0"
-tempfile = "3.21"
+tempfile = "3.23"
 mockito = "1.7"
 toml = "~0.9"
