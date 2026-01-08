@@ -23,5 +23,6 @@ pub use types::EnvEvaluable;
 // 向后兼容别名
 pub use global::find_project_define;
 pub use global::find_project_define_base;
+#[deprecated]
 pub use types::EnvEvaluable as EnvEvalable;
 pub use types::{UpperKey, ValueObj, ValueType, ValueVec};
