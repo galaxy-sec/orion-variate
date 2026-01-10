@@ -24,11 +24,6 @@ pub struct VarCollection {
     )]
     module_vars: Vec<VarDefinition>,
 }
-impl orion_conf::LoadHook for VarCollection {
-    fn loaded_event_do(&mut self) {
-        self.mark_vars_scope();
-    }
-}
 impl VarToValue<ValueDict> for Vec<VarDefinition> {
     fn to_val(&self) -> ValueDict {
         let mut dict = ValueDict::new();
