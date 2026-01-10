@@ -2,7 +2,7 @@
 name = "orion-variate"
 authors = ["seeker-zuo<seeker-zuo@outlook.com>"]
 edition = "2024"
-version = "0.10.4"
+version = "0.10.5"
 description = "Variate for Project"
 license = "MIT"
 repository = "https://github.com/galaxy-sec/orion-variate"
