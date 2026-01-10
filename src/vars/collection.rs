@@ -1,6 +1,5 @@
 use getset::Getters;
 use indexmap::IndexMap;
-use orion_conf::StorageLoadEvent;
 use serde_derive::{Deserialize, Serialize};
 
 use crate::vars::VarToValue;
@@ -25,7 +24,7 @@ pub struct VarCollection {
     )]
     module_vars: Vec<VarDefinition>,
 }
-impl StorageLoadEvent for VarCollection {
+impl orion_conf::LoadHook for VarCollection {
     fn loaded_event_do(&mut self) {
         self.mark_vars_scope();
     }
