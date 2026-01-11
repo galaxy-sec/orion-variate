@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.8] - 2026-01-11
+
+### Fixed
+
+- **Critical bug fix**: Fixed `env_eval` incorrectly parsing environment variable values containing `://` (e.g., URLs, database connection strings)
+  - The parser previously treated any `:` as a default value separator, even when it appeared outside the `${}` syntax
+  - This caused incorrect replacement when variable values contained protocols like `postgresql://`, `https://`, etc.
+  - Example of the bug:
+    ```rust
+    let mut dict = EnvDict::new();
+    dict.insert("DB_URL", "postgresql://localhost/mydb");
+    "${DB_URL}".env_eval(&dict); // Was broken, now fixed
+    ```
+  - The fix ensures `:` is only treated as a separator when it appears within the `${}` brackets
+  - Added comprehensive tests to prevent regression
+
+### Added
+
+- New test case `test_url_with_protocol` for verifying URL handling in environment variable values
+- New test case `test_url_with_protocol_complex` for testing multiple variables with URL values
+- Example program `examples/test_multiline_json.rs` demonstrating JSON configuration with URL environment variables
+
 ## [0.10.7] - 2026-01-11
 
 ### Added

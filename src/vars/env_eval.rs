@@ -9,20 +9,21 @@ fn until_beg<'i>(s: &mut &'i str) -> winnow::Result<&'i str> {
     "${".parse_next(s)?;
     Ok(data)
 }
-fn until_name<'i>(s: &mut &'i str) -> winnow::Result<&'i str> {
-    let data = take_until(0.., ":").parse_next(s)?;
-    ":".parse_next(s)?;
-    Ok(data)
-}
 fn until_name_default<'i>(s: &mut &'i str) -> winnow::Result<Vec<&'i str>> {
-    let mut data: Vec<&str> = Vec::new();
-    if let Ok(ok_data) = until_name.parse_next(s) {
-        data.push(ok_data)
-    }
-    let last = take_until(0.., "}").parse_next(s)?;
+    // First, get everything until the closing '}'
+    let content = take_until(0.., "}").parse_next(s)?;
     "}".parse_next(s)?;
-    data.push(last);
-    Ok(data)
+
+    // Check if there's a ':' in the content for default value syntax
+    if let Some(colon_pos) = content.find(':') {
+        // Split into variable name and default value
+        let var_name = &content[..colon_pos];
+        let default_value = &content[colon_pos + 1..];
+        Ok(vec![var_name, default_value])
+    } else {
+        // No default value, just the variable name
+        Ok(vec![content])
+    }
 }
 
 /// Extracts all environment variable names from a string
@@ -300,5 +301,29 @@ mod tests {
 
         let vars = extract_env_var_names("${A}${B}${C}");
         assert_eq!(vars, vec!["A", "B", "C"]);
+    }
+
+    #[test]
+    fn test_url_with_protocol() {
+        let mut dict = EnvDict::new();
+        dict.insert("DB_URL", ValueType::from("postgresql://localhost/mydb"));
+        dict.insert("API_KEY", ValueType::from("secret-key-123"));
+
+        assert_eq!(
+            expand_env_vars(&dict, "${DB_URL}"),
+            "postgresql://localhost/mydb"
+        );
+    }
+
+    #[test]
+    fn test_url_with_protocol_complex() {
+        let mut dict = EnvDict::new();
+        dict.insert("DB_URL", ValueType::from("postgresql://localhost/mydb"));
+        dict.insert("API_KEY", ValueType::from("secret-key-123"));
+
+        assert_eq!(
+            expand_env_vars(&dict, "database_url: ${DB_URL}, api_key: ${API_KEY}"),
+            "database_url: postgresql://localhost/mydb, api_key: secret-key-123"
+        );
     }
 }
