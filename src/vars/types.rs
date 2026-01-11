@@ -8,7 +8,10 @@ use crate::vars::{
     parse::{take_value_map, take_value_vec},
 };
 
-use super::{ValueDict, env_eval::expand_env_vars};
+use super::{
+    ValueDict,
+    env_eval::{expand_env_vars, extract_env_var_names},
+};
 use derive_more::From;
 use indexmap::IndexMap;
 use orion_error::{ErrorOwe, ErrorWith};
@@ -18,6 +21,57 @@ use winnow::Parser;
 pub type EnvDict = ValueDict;
 pub trait EnvEvaluable<T> {
     fn env_eval(self, dict: &EnvDict) -> T;
+}
+
+/// Trait to check if a value contains environment variable placeholders
+/// that need evaluation (e.g., `${VAR_NAME}` or `${VAR_NAME:default}`)
+pub trait EnvChecker {
+    /// Returns true if the value contains environment variable placeholders
+    fn needs_env_eval(&self) -> bool;
+
+    /// Returns a list of all environment variable names found in the value
+    /// For `${VAR:default}` syntax, only returns the variable name without the default value
+    fn list_env_vars(&self) -> Vec<String>;
+}
+
+impl EnvChecker for String {
+    fn needs_env_eval(&self) -> bool {
+        self.contains("${")
+    }
+
+    fn list_env_vars(&self) -> Vec<String> {
+        extract_env_var_names(self)
+    }
+}
+
+impl EnvChecker for &str {
+    fn needs_env_eval(&self) -> bool {
+        self.contains("${")
+    }
+
+    fn list_env_vars(&self) -> Vec<String> {
+        extract_env_var_names(self)
+    }
+}
+
+impl EnvChecker for Option<String> {
+    fn needs_env_eval(&self) -> bool {
+        self.as_ref().is_some_and(|s| s.needs_env_eval())
+    }
+
+    fn list_env_vars(&self) -> Vec<String> {
+        self.as_ref().map_or(Vec::new(), |s| s.list_env_vars())
+    }
+}
+
+impl EnvChecker for Option<&str> {
+    fn needs_env_eval(&self) -> bool {
+        self.is_some_and(|s| s.needs_env_eval())
+    }
+
+    fn list_env_vars(&self) -> Vec<String> {
+        self.map_or(Vec::new(), |s| s.list_env_vars())
+    }
 }
 
 impl EnvEvaluable<String> for String {
@@ -93,10 +147,39 @@ impl Display for ValueType {
     }
 }
 
+impl EnvChecker for ValueType {
+    fn needs_env_eval(&self) -> bool {
+        match self {
+            ValueType::String(s) => s.needs_env_eval(),
+            ValueType::Obj(obj) => obj.values().any(|v| v.needs_env_eval()),
+            ValueType::List(list) => list.iter().any(|v| v.needs_env_eval()),
+            // Other types (Bool, Number, Float, Ip) don't contain env vars
+            _ => false,
+        }
+    }
+
+    fn list_env_vars(&self) -> Vec<String> {
+        match self {
+            ValueType::String(s) => s.list_env_vars(),
+            ValueType::Obj(obj) => obj.values().flat_map(|v| v.list_env_vars()).collect(),
+            ValueType::List(list) => list.iter().flat_map(|v| v.list_env_vars()).collect(),
+            _ => Vec::new(),
+        }
+    }
+}
+
 impl EnvEvaluable<ValueType> for ValueType {
     fn env_eval(self, dict: &EnvDict) -> ValueType {
         match self {
             ValueType::String(v) => ValueType::String(v.env_eval(dict)),
+            ValueType::Obj(obj) => ValueType::Obj(
+                obj.into_iter()
+                    .map(|(k, v)| (k, v.env_eval(dict)))
+                    .collect(),
+            ),
+            ValueType::List(list) => {
+                ValueType::List(list.into_iter().map(|v| v.env_eval(dict)).collect())
+            }
             _ => self,
         }
     }
@@ -381,5 +464,310 @@ mod tests {
         // 测试无效 List 值
         let mut list_val = ValueType::List(ValueVec::new());
         assert!(list_val.update_from_str("invalid").is_err());
+    }
+
+    #[test]
+    fn test_env_checker_string() {
+        use super::EnvChecker;
+
+        // 包含环境变量的字符串
+        let with_env = String::from("Hello ${USER}");
+        assert!(with_env.needs_env_eval());
+
+        // 不包含环境变量的字符串
+        let without_env = String::from("Hello World");
+        assert!(!without_env.needs_env_eval());
+
+        // 包含默认值语法的环境变量
+        let with_default = String::from("${VAR:default}");
+        assert!(with_default.needs_env_eval());
+    }
+
+    #[test]
+    fn test_env_checker_str() {
+        use super::EnvChecker;
+
+        // 包含环境变量的 &str
+        let with_env: &str = "Hello ${USER}";
+        assert!(with_env.needs_env_eval());
+
+        // 不包含环境变量的 &str
+        let without_env: &str = "Hello World";
+        assert!(!without_env.needs_env_eval());
+
+        // 包含默认值语法的环境变量
+        let with_default: &str = "${VAR:default}";
+        assert!(with_default.needs_env_eval());
+
+        // 多个变量
+        let multi: &str = "${VAR1} and ${VAR2}";
+        assert!(multi.needs_env_eval());
+    }
+
+    #[test]
+    fn test_env_checker_option_string() {
+        use super::EnvChecker;
+
+        let some_with_env = Some(String::from("${VAR}"));
+        assert!(some_with_env.needs_env_eval());
+
+        let some_without_env = Some(String::from("plain text"));
+        assert!(!some_without_env.needs_env_eval());
+
+        let none: Option<String> = None;
+        assert!(!none.needs_env_eval());
+    }
+
+    #[test]
+    fn test_env_checker_option_str() {
+        use super::EnvChecker;
+
+        let some_with_env: Option<&str> = Some("${VAR}");
+        assert!(some_with_env.needs_env_eval());
+
+        let some_without_env: Option<&str> = Some("plain text");
+        assert!(!some_without_env.needs_env_eval());
+
+        let none: Option<&str> = None;
+        assert!(!none.needs_env_eval());
+    }
+
+    #[test]
+    fn test_env_checker_value_type() {
+        use super::EnvChecker;
+
+        // String 类型
+        let string_with_env = ValueType::String("path: ${HOME}".to_string());
+        assert!(string_with_env.needs_env_eval());
+
+        let string_without_env = ValueType::String("plain".to_string());
+        assert!(!string_without_env.needs_env_eval());
+
+        // Bool, Number 等类型不包含环境变量
+        assert!(!ValueType::Bool(true).needs_env_eval());
+        assert!(!ValueType::Number(42).needs_env_eval());
+        assert!(!ValueType::Float(2.5).needs_env_eval());
+
+        // List 类型 - 递归检查
+        let list_with_env = ValueType::List(vec![
+            ValueType::String("${VAR1}".to_string()),
+            ValueType::Number(42),
+        ]);
+        assert!(list_with_env.needs_env_eval());
+
+        let list_without_env = ValueType::List(vec![
+            ValueType::String("plain".to_string()),
+            ValueType::Number(42),
+        ]);
+        assert!(!list_without_env.needs_env_eval());
+
+        // Obj 类型 - 递归检查
+        let mut obj_with_env = ValueObj::new();
+        obj_with_env.insert("key1".to_string(), ValueType::String("${VAR}".to_string()));
+        obj_with_env.insert("key2".to_string(), ValueType::Number(42));
+        assert!(ValueType::Obj(obj_with_env).needs_env_eval());
+
+        let mut obj_without_env = ValueObj::new();
+        obj_without_env.insert("key1".to_string(), ValueType::String("plain".to_string()));
+        assert!(!ValueType::Obj(obj_without_env).needs_env_eval());
+    }
+
+    #[test]
+    fn test_env_eval_with_checker() {
+        use super::{EnvChecker, EnvEvaluable};
+
+        let mut dict = EnvDict::new();
+        dict.insert("USER", ValueType::from("alice"));
+        dict.insert("APP", ValueType::from("myapp"));
+
+        // 只对需要求值的字符串进行求值
+        let text = String::from("Hello ${USER}, welcome to ${APP}!");
+        if text.needs_env_eval() {
+            let result = text.env_eval(&dict);
+            assert_eq!(result, "Hello alice, welcome to myapp!");
+        }
+
+        // 不需要求值的可以跳过
+        let plain = String::from("No variables here");
+        assert!(!plain.needs_env_eval());
+    }
+
+    #[test]
+    fn test_value_type_env_eval_recursive() {
+        use super::EnvEvaluable;
+
+        let mut dict = EnvDict::new();
+        dict.insert("VAR1", ValueType::from("value1"));
+        dict.insert("VAR2", ValueType::from("value2"));
+
+        // 测试 List 递归求值
+        let list = ValueType::List(vec![
+            ValueType::String("${VAR1}".to_string()),
+            ValueType::String("${VAR2}".to_string()),
+            ValueType::Number(42),
+        ]);
+
+        let evaluated = list.env_eval(&dict);
+        if let ValueType::List(items) = evaluated {
+            assert_eq!(items[0], ValueType::String("value1".to_string()));
+            assert_eq!(items[1], ValueType::String("value2".to_string()));
+            assert_eq!(items[2], ValueType::Number(42));
+        } else {
+            panic!("Expected List type");
+        }
+
+        // 测试 Obj 递归求值
+        let mut obj = ValueObj::new();
+        obj.insert(
+            "field1".to_string(),
+            ValueType::String("${VAR1}".to_string()),
+        );
+        obj.insert("field2".to_string(), ValueType::Number(100));
+
+        let evaluated_obj = ValueType::Obj(obj).env_eval(&dict);
+        if let ValueType::Obj(fields) = evaluated_obj {
+            assert_eq!(
+                fields.get("field1"),
+                Some(&ValueType::String("value1".to_string()))
+            );
+            assert_eq!(fields.get("field2"), Some(&ValueType::Number(100)));
+        } else {
+            panic!("Expected Obj type");
+        }
+    }
+
+    #[test]
+    fn test_list_env_vars_string() {
+        use super::EnvChecker;
+
+        let text = String::from("Hello ${USER}, path is ${HOME}/bin");
+        let vars = text.list_env_vars();
+        assert_eq!(vars, vec!["USER", "HOME"]);
+    }
+
+    #[test]
+    fn test_list_env_vars_str() {
+        use super::EnvChecker;
+
+        let text: &str = "Hello ${USER}, path is ${HOME}/bin";
+        let vars = text.list_env_vars();
+        assert_eq!(vars, vec!["USER", "HOME"]);
+
+        // 空字符串
+        let empty: &str = "";
+        assert!(empty.list_env_vars().is_empty());
+
+        // 无变量
+        let plain: &str = "no variables here";
+        assert!(plain.list_env_vars().is_empty());
+    }
+
+    #[test]
+    fn test_list_env_vars_string_with_default() {
+        use super::EnvChecker;
+
+        let text = String::from("${VAR1:default1} and ${VAR2} and ${VAR3:default3}");
+        let vars = text.list_env_vars();
+        assert_eq!(vars, vec!["VAR1", "VAR2", "VAR3"]);
+    }
+
+    #[test]
+    fn test_list_env_vars_str_with_default() {
+        use super::EnvChecker;
+
+        let text: &str = "${VAR1:default1} and ${VAR2} and ${VAR3:default3}";
+        let vars = text.list_env_vars();
+        assert_eq!(vars, vec!["VAR1", "VAR2", "VAR3"]);
+    }
+
+    #[test]
+    fn test_list_env_vars_option_string() {
+        use super::EnvChecker;
+
+        let some_text = Some(String::from("${APP}/${VERSION}"));
+        assert_eq!(some_text.list_env_vars(), vec!["APP", "VERSION"]);
+
+        let none_text: Option<String> = None;
+        assert!(none_text.list_env_vars().is_empty());
+    }
+
+    #[test]
+    fn test_list_env_vars_option_str() {
+        use super::EnvChecker;
+
+        let some_text: Option<&str> = Some("${APP}/${VERSION}");
+        assert_eq!(some_text.list_env_vars(), vec!["APP", "VERSION"]);
+
+        let none_text: Option<&str> = None;
+        assert!(none_text.list_env_vars().is_empty());
+    }
+
+    #[test]
+    fn test_list_env_vars_value_type() {
+        use super::EnvChecker;
+
+        // String 类型
+        let str_val = ValueType::String("${HOME}/bin".to_string());
+        assert_eq!(str_val.list_env_vars(), vec!["HOME"]);
+
+        // List 类型 - 递归收集
+        let list_val = ValueType::List(vec![
+            ValueType::String("${VAR1}".to_string()),
+            ValueType::Number(42),
+            ValueType::String("${VAR2}/${VAR3}".to_string()),
+        ]);
+        assert_eq!(list_val.list_env_vars(), vec!["VAR1", "VAR2", "VAR3"]);
+
+        // Obj 类型 - 递归收集
+        let mut obj = ValueObj::new();
+        obj.insert(
+            "path".to_string(),
+            ValueType::String("${APP_DIR}/data".to_string()),
+        );
+        obj.insert("port".to_string(), ValueType::Number(8080));
+        obj.insert(
+            "config".to_string(),
+            ValueType::String("${CONFIG_FILE}".to_string()),
+        );
+        let obj_val = ValueType::Obj(obj);
+        let vars = obj_val.list_env_vars();
+        // 注意：因为 IndexMap 保持插入顺序
+        assert_eq!(vars.len(), 2);
+        assert!(vars.contains(&"APP_DIR".to_string()));
+        assert!(vars.contains(&"CONFIG_FILE".to_string()));
+
+        // 不包含变量的类型
+        assert!(ValueType::Bool(true).list_env_vars().is_empty());
+        assert!(ValueType::Number(42).list_env_vars().is_empty());
+    }
+
+    #[test]
+    fn test_list_env_vars_nested_structures() {
+        use super::EnvChecker;
+
+        // 嵌套的复杂结构
+        let mut inner_obj = ValueObj::new();
+        inner_obj.insert(
+            "inner1".to_string(),
+            ValueType::String("${INNER_VAR}".to_string()),
+        );
+
+        let mut outer_obj = ValueObj::new();
+        outer_obj.insert(
+            "outer1".to_string(),
+            ValueType::String("${OUTER_VAR}".to_string()),
+        );
+        outer_obj.insert("nested".to_string(), ValueType::Obj(inner_obj));
+
+        let list_with_obj = ValueType::List(vec![
+            ValueType::String("${LIST_VAR}".to_string()),
+            ValueType::Obj(outer_obj),
+        ]);
+
+        let vars = list_with_obj.list_env_vars();
+        assert_eq!(vars.len(), 3);
+        assert!(vars.contains(&"LIST_VAR".to_string()));
+        assert!(vars.contains(&"OUTER_VAR".to_string()));
+        assert!(vars.contains(&"INNER_VAR".to_string()));
     }
 }

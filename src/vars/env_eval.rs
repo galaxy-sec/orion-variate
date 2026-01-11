@@ -25,6 +25,46 @@ fn until_name_default<'i>(s: &mut &'i str) -> winnow::Result<Vec<&'i str>> {
     Ok(data)
 }
 
+/// Extracts all environment variable names from a string
+/// For `${VAR:default}` syntax, only returns "VAR"
+pub fn extract_env_var_names(input: &str) -> Vec<String> {
+    let mut vars = Vec::new();
+    let mut chars = input.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c == '$' && chars.peek() == Some(&'{') {
+            chars.next(); // consume '{'
+
+            let mut var_name = String::new();
+            let mut found_end = false;
+
+            // Extract variable name until ':' or '}'
+            while let Some(&next_char) = chars.peek() {
+                if next_char == ':' || next_char == '}' {
+                    found_end = true;
+                    break;
+                }
+                var_name.push(next_char);
+                chars.next();
+            }
+
+            if found_end && !var_name.is_empty() {
+                vars.push(var_name);
+            }
+
+            // Skip to the closing '}'
+            while let Some(&next_char) = chars.peek() {
+                chars.next();
+                if next_char == '}' {
+                    break;
+                }
+            }
+        }
+    }
+
+    vars
+}
+
 pub fn expand_env_vars(dict: &EnvDict, input: &str) -> String {
     let mut out = String::new();
     let mut data = input;
@@ -204,5 +244,61 @@ mod tests {
             expand_env_vars(&dict, "Hello ${DEFAULT_TEST_VAR:World}"),
             "Hello World"
         );
+    }
+
+    #[test]
+    fn test_extract_env_var_names_single() {
+        use super::extract_env_var_names;
+
+        let vars = extract_env_var_names("Hello ${USER}");
+        assert_eq!(vars, vec!["USER"]);
+    }
+
+    #[test]
+    fn test_extract_env_var_names_multiple() {
+        use super::extract_env_var_names;
+
+        let vars = extract_env_var_names("/opt/${APP}/bin/${USER}");
+        assert_eq!(vars, vec!["APP", "USER"]);
+    }
+
+    #[test]
+    fn test_extract_env_var_names_with_default() {
+        use super::extract_env_var_names;
+
+        let vars = extract_env_var_names("Path: ${HOME:/default/path}");
+        assert_eq!(vars, vec!["HOME"]);
+    }
+
+    #[test]
+    fn test_extract_env_var_names_mixed() {
+        use super::extract_env_var_names;
+
+        let vars = extract_env_var_names("${VAR1} and ${VAR2:default} and ${VAR3}");
+        assert_eq!(vars, vec!["VAR1", "VAR2", "VAR3"]);
+    }
+
+    #[test]
+    fn test_extract_env_var_names_no_vars() {
+        use super::extract_env_var_names;
+
+        let vars = extract_env_var_names("No variables here");
+        assert!(vars.is_empty());
+    }
+
+    #[test]
+    fn test_extract_env_var_names_empty() {
+        use super::extract_env_var_names;
+
+        let vars = extract_env_var_names("");
+        assert!(vars.is_empty());
+    }
+
+    #[test]
+    fn test_extract_env_var_names_consecutive() {
+        use super::extract_env_var_names;
+
+        let vars = extract_env_var_names("${A}${B}${C}");
+        assert_eq!(vars, vec!["A", "B", "C"]);
     }
 }
